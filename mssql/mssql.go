@@ -62,5 +62,29 @@ func InitRailWay() {
 		log.Fatalf("表格创建失败: %v", err)
 	}
 	fmt.Println("数据库和表格已成功创建或已存在！")
-	service.RailWayService = dao.NewRailWayDAO(db)
+	service.RailWayDAO = dao.NewRailWayDAO(db)
+}
+
+func CleanRailWay() {
+	db, err := gorm.Open(sqlserver.Open(dsn), &gorm.Config{})
+	if err != nil {
+		log.Fatalf("无法连接到数据库: %v", err)
+	}
+	dsn = "sqlserver://sa:Zhangyi2002@localhost:1433?database=station_db"
+	err = db.Migrator().DropTable(&dao.RailWay{})
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func CleanStation() {
+	db, err := gorm.Open(sqlserver.Open(dsn), &gorm.Config{})
+	if err != nil {
+		log.Fatalf("无法连接到数据库: %v", err)
+	}
+	dsn = "sqlserver://sa:Zhangyi2002@localhost:1433?database=station_db"
+	err = db.Migrator().DropTable(&dao.Station{})
+	if err != nil {
+		log.Fatal(err)
+	}
 }

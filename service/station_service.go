@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"github.com/xuri/excelize/v2"
 	"log"
+	"os"
 	"railway/dao"
+	"strings"
 )
 
 var StationService dao.StationDAO
@@ -58,6 +60,7 @@ func DownLoadStation() error {
 			StationNumber:      row[5], // 车站标号
 			CityCode:           row[6], // 城市代码
 			CityName:           row[7], // 车站所属城市
+			IsKeyStation:       0,      //非二次转乘站点
 		}
 
 		// 将转换后的 Station 加入切片
@@ -75,6 +78,29 @@ func DownLoadStation() error {
 		//	fmt.Printf("index %d success!\n", index)
 		//}
 	}
+	data, err := os.ReadFile("站点选择.txt") // 确保文件路径正确
+	if err != nil {
+		fmt.Println("读取文件失败:", err)
+		return err
+	}
+
+	// 按换行符分割字符串
+	cities := strings.Split(string(data), "\n")
+
+	// 去掉可能的空行
+	for _, city := range cities {
+		city = strings.TrimSpace(city)
+		Stations, err := StationService.GetStationByCityName(city)
+		if err != nil {
+			fmt.Printf("city:%v, err:%s\n", city, err)
+			return err
+		}
+		for _, station := range Stations {
+			station.IsKeyStation = 1
+			err = StationService.UpdateStation(&station)
+		}
+	}
+
 	log.Print("DownLoadStation success\n")
 	return nil
 }

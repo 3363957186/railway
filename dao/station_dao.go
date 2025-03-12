@@ -9,18 +9,20 @@ type Station struct {
 	ID                 int    `gorm:"primaryKey;autoIncrement"`
 	StationAbbr        string `gorm:"size:20" json:"station_abbr"`         // 车站简称
 	StationName        string `gorm:"size:100" json:"station_name"`        // 车站名
-	StationCode        string `gorm:"size:20" json:"station_code"`         // 车站代号
+	StationCode        string `gorm:"unique;size:20" json:"station_code"`  // 车站代号
 	StationPinyin      string `gorm:"size:100" json:"station_pinyin"`      // 车站拼音
 	StationFirstLetter string `gorm:"size:10" json:"station_first_letter"` // 车站首字母
 	StationNumber      string `gorm:"size:20" json:"station_number"`       // 车站标号
 	CityCode           string `gorm:"size:10" json:"city_code"`            // 城市代码
 	CityName           string `gorm:"size:100" json:"city_name"`           // 车站所属城市
+	IsKeyStation       int    ` json:"is_key_station"`                     //是否是二次转乘选择站点
 }
 
 type StationDAO interface {
 	CreateStation(station *Station) error
 	GetStationByID(id int) (*Station, error)
 	GetStationByName(name string) (*Station, error)
+	GetStationByCityName(cityName string) ([]Station, error)
 	GetAllStations() ([]Station, error)
 	UpdateStation(station *Station) error
 	DeleteStation(id int) error
@@ -84,9 +86,18 @@ func (dao *StationDAOImpl) DeleteStation(id int) error {
 
 func (dao *StationDAOImpl) GetStationByName(name string) (*Station, error) {
 	var station Station
-	result := dao.DB.Where("station_name = ?", name).First(&station)
+	result := dao.DB.Where("station_name = ?", name).Find(&station)
 	if result.Error != nil {
 		return nil, result.Error
 	}
 	return &station, nil
+}
+
+func (dao *StationDAOImpl) GetStationByCityName(cityName string) ([]Station, error) {
+	var stations []Station
+	result := dao.DB.Where("city_name = ?", cityName).Find(&stations)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return stations, nil
 }

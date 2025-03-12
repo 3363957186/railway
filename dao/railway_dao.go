@@ -12,6 +12,7 @@ type RailWay struct {
 	ArrivalTime      string `gorm:"size:20" json:"arrival_time"`
 	RunningTime      string `gorm:"size:20" json:"running_time"`
 	ArrivalDay       uint
+	IsHighSpeed      uint `gorm:"size:1" json:"is_high_speed"` //1为高速列车，0为普速列车
 }
 
 type RailWayDAO interface {
@@ -21,7 +22,11 @@ type RailWayDAO interface {
 	GetRailWayByTrainNumber(trainNumber string) (*RailWay, error)
 	GetRailWayByDepartureStation(name string) ([]RailWay, error)
 	GetRailWayByArrivalStation(name string) ([]RailWay, error)
+	GetRailWayByDepartureStationWithoutArrivalStation(departureName, arrivalName string) ([]RailWay, error)
+	GetRailWayByArrivalStationWithoutDepartureStation(departureName, arrivalName string) ([]RailWay, error)
 	GetRailWayByDepartureStationAndArrivalStation(departureName, arrivalName string) ([]RailWay, error)
+	GetRailWayByDepartureStationAndArrivalStationOnlyHighSpeed(departureName, arrivalName string) ([]RailWay, error)
+	GetRailWayByDepartureStationAndArrivalStationOnlyLowSpeed(departureName, arrivalName string) ([]RailWay, error)
 	GetAllRailWays() ([]RailWay, error)
 	UpdateRailWays(station *RailWay) error
 	DeleteRailWays(id int) error
@@ -91,9 +96,45 @@ func (dao *RailWayDAOImpl) GetRailWayByArrivalStation(name string) ([]RailWay, e
 	return railWays, nil
 }
 
+func (dao *RailWayDAOImpl) GetRailWayByDepartureStationWithoutArrivalStation(departureName, arrivalName string) ([]RailWay, error) {
+	railWays := make([]RailWay, 0)
+	result := dao.DB.Where("departure_station = ? and arrival_station != ?", departureName, arrivalName).Find(&railWays)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return railWays, nil
+}
+
+func (dao *RailWayDAOImpl) GetRailWayByArrivalStationWithoutDepartureStation(departureName, arrivalName string) ([]RailWay, error) {
+	railWays := make([]RailWay, 0)
+	result := dao.DB.Where("departure_station != ? and arrival_station = ?", departureName, arrivalName).Find(&railWays)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return railWays, nil
+}
+
 func (dao *RailWayDAOImpl) GetRailWayByDepartureStationAndArrivalStation(departureName, arrivalName string) ([]RailWay, error) {
 	railWays := make([]RailWay, 0)
-	result := dao.DB.Where("departure_station = ? and arrival_name = ?", departureName, arrivalName).Find(&railWays)
+	result := dao.DB.Where("departure_station = ? and arrival_station = ?", departureName, arrivalName).Find(&railWays)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return railWays, nil
+}
+
+func (dao *RailWayDAOImpl) GetRailWayByDepartureStationAndArrivalStationOnlyHighSpeed(departureName, arrivalName string) ([]RailWay, error) {
+	railWays := make([]RailWay, 0)
+	result := dao.DB.Where("departure_station = ? and arrival_station = ? and is_high_speed = 1", departureName, arrivalName)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return railWays, nil
+}
+
+func (dao *RailWayDAOImpl) GetRailWayByDepartureStationAndArrivalStationOnlyLowSpeed(departureName, arrivalName string) ([]RailWay, error) {
+	railWays := make([]RailWay, 0)
+	result := dao.DB.Where("departure_station = ? and arrival_station = ? and is_high_speed = 0", departureName, arrivalName)
 	if result.Error != nil {
 		return nil, result.Error
 	}
