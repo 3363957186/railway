@@ -88,3 +88,20 @@ func CleanStation() {
 		log.Fatal(err)
 	}
 }
+
+func DropDB() {
+	db, err := gorm.Open(sqlserver.Open(dsn), &gorm.Config{})
+	if err != nil {
+		fmt.Println("数据库连接失败:", err)
+		return
+	}
+
+	// 先强制断开数据库连接（针对 MSSQL）
+	db.Exec("ALTER DATABASE testdb SET SINGLE_USER WITH ROLLBACK IMMEDIATE;")
+	err = db.Exec("DROP DATABASE station_db").Error
+	if err != nil {
+		fmt.Println("删除数据库失败:", err)
+	} else {
+		fmt.Println("数据库删除成功")
+	}
+}

@@ -17,7 +17,7 @@ type RailWay struct {
 
 type RailWayDAO interface {
 	CreateRailWay(railway *RailWay) error
-	BatchCreateRailWays(railways []*RailWay) error
+	BatchCreateRailWays(railways []RailWay) error
 	GetRailWayByID(id int) (*RailWay, error)
 	GetRailWayByTrainNumber(trainNumber string) (*RailWay, error)
 	GetRailWayByDepartureStation(name string) ([]RailWay, error)
@@ -52,7 +52,7 @@ func (dao *RailWayDAOImpl) CreateRailWay(railWay *RailWay) error {
 	return dao.DB.Create(railWay).Error
 }
 
-func (dao *RailWayDAOImpl) BatchCreateRailWays(railways []*RailWay) error {
+func (dao *RailWayDAOImpl) BatchCreateRailWays(railways []RailWay) error {
 	if len(railways) == 0 {
 		return nil
 	}

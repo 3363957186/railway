@@ -12,6 +12,7 @@ import (
 )
 
 const (
+	Default       = 0
 	OnlyHighSpeed = 1
 	OnlyLowSpeed  = 2
 
@@ -23,6 +24,9 @@ const (
 
 	LowPriceFirst  = 5
 	HighPriceFirst = 6
+
+	GetAllResult    = 1
+	DefaultStopTime = 10
 )
 
 type OriginalRailWay struct {
@@ -37,10 +41,25 @@ type OriginalRailWay struct {
 	StopTime        int64
 }
 
+type TemplateTrainSchedule struct {
+	ID               []uint
+	TrainNumber      []string
+	TrainNo          []string
+	DepartureStation []string
+	DepartureTime    []string
+	ArrivalStation   []string
+	ArrivalTime      []string
+	RunningTime      []string
+	ArrivalDay       []uint
+	IsHighSpeed      []uint
+	AllRunningTime   uint
+}
+
 type RailwayService interface {
 	SearchDirectly(departureStation, arrivalStation string, speedOption, sortOption int) ([]dao.RailWay, error)
 	SearchDirectlyOnline(departureStation, arrivalStation string) ([]dao.RailWay, error)
-	SearchWithOneTrans(departureStation, arrivalStation string, speedOption, sortOption int) (map[string][]dao.RailWay, error)
+	SearchWithOneTrans(departureStation, arrivalStation string, speedOption, sortOption int, limitStopTime, getAllResult int64) (map[string][]dao.RailWay, error)
+	SearchWithTwoTrans(departureStation, arrivalStation string, speedOption, sortOption int, limitStopTime, getAllResult int64) (map[string][]dao.RailWay, error)
 }
 
 type RailWayServiceImpl struct {
@@ -77,6 +96,7 @@ func (r *RailWayServiceImpl) SearchDirectly(departureStation, arrivalStation str
 		log.Printf("[SearchDirectly] err:%s", err.Error())
 		return nil, err
 	}
+	result = resultDedUp(result)
 	switch sortOption {
 	case LowRunningTimeFirst:
 		result = sortByLowRunningTime(result)
@@ -95,7 +115,7 @@ func (r *RailWayServiceImpl) SearchDirectlyOnline(departureStation, arrivalStati
 	return nil, errors.New("not implement")
 }
 
-func (r *RailWayServiceImpl) SearchWithOneTrans(departureStation, arrivalStation string, speedOption, sortOption int) (map[string][]dao.RailWay, error) {
+func (r *RailWayServiceImpl) SearchWithOneTrans(departureStation, arrivalStation string, speedOption, sortOption int, limitStopTime, getAllResult int64) (map[string][]dao.RailWay, error) {
 	if !r.checkStation(departureStation) || !r.checkStation(arrivalStation) {
 		log.Printf("[SearchDirectly] stationNotFind")
 		return nil, errors.New("stationNotFind")
@@ -110,7 +130,183 @@ func (r *RailWayServiceImpl) SearchWithOneTrans(departureStation, arrivalStation
 		log.Printf("[SearchWithOneTrans ] err:%s", err.Error())
 		return nil, err
 	}
-	return CombineTrainSchedule(departTrain, arrivalTrain), nil
+	result := CombineTrainSchedule(departTrain, arrivalTrain, speedOption)
+	return SortTransResult(result, sortOption, limitStopTime, getAllResult), nil
+}
+
+func (r *RailWayServiceImpl) SearchWithTwoTrans(departureStation, arrivalStation string, speedOption, sortOption int, limitStopTime, getAllResult int64) (map[string][]dao.RailWay, error) {
+	return nil, nil
+}
+
+// 对转乘的进行排序，并且根据排序结果分别取动车前10，普车前10，动普混合前10
+func SortTransResult(result map[string][]dao.RailWay, sortOption int, limitStopTime int64, getAllResult int64) map[string][]dao.RailWay {
+	highSpeed := make(map[string][]dao.RailWay)
+	lowSpeed := make(map[string][]dao.RailWay)
+	highAndLow := make(map[string][]dao.RailWay)
+	allOptions := make(map[string][]dao.RailWay)
+	templateStruct := make([]TemplateTrainSchedule, 0)
+	for _, tr := range result {
+		templateStruct = append(templateStruct, ChangeToTemplate(tr, limitStopTime))
+	}
+	switch sortOption {
+	case LowRunningTimeFirst:
+		templateStruct = sortTemplateStructByLowRunningTime(templateStruct)
+	case HighRunningTimeFirst:
+		templateStruct = sortTemplateStructByHighRunningTime(templateStruct)
+	case EarlyFirst:
+		templateStruct = sortTemplateStructByEarlyFirst(templateStruct)
+	case LateFirst:
+		templateStruct = sortTemplateStructByLateFirst(templateStruct)
+	default:
+		templateStruct = sortTemplateStructByLowRunningTime(templateStruct)
+	}
+	if getAllResult == GetAllResult {
+		for _, tr := range templateStruct {
+			railways, trainString := ChangeToRailWays(tr)
+			highSpeed[trainString] = railways
+		}
+		return highSpeed
+	}
+	for _, tr := range templateStruct {
+		railways, trainString := ChangeToRailWays(tr)
+		highSpeedCount := 0
+		for _, railway := range railways {
+			highSpeedCount = highSpeedCount + int(railway.IsHighSpeed)
+		}
+		if len(railways) == highSpeedCount && len(highSpeed) < 10 {
+			highSpeed[trainString] = railways
+			allOptions[trainString] = railways
+		} else if highSpeedCount == 0 && len(highAndLow) < 10 {
+			highAndLow[trainString] = railways
+			allOptions[trainString] = railways
+		} else if len(lowSpeed) < 10 {
+			lowSpeed[trainString] = railways
+			allOptions[trainString] = railways
+		}
+	}
+	return allOptions
+}
+
+func ChangeToRailWays(tt TemplateTrainSchedule) ([]dao.RailWay, string) {
+	result := make([]dao.RailWay, 0)
+	trainString := ""
+	for index, _ := range tt.ID {
+		trainString = trainString + tt.TrainNumber[index] + "/"
+		result = append(result, dao.RailWay{
+			ID:               tt.ID[index],
+			TrainNumber:      tt.TrainNumber[index],
+			TrainNo:          tt.TrainNo[index],
+			ArrivalStation:   tt.ArrivalStation[index],
+			ArrivalTime:      tt.ArrivalTime[index],
+			DepartureStation: tt.DepartureStation[index],
+			DepartureTime:    tt.DepartureTime[index],
+			RunningTime:      tt.RunningTime[index],
+			ArrivalDay:       tt.ArrivalDay[index],
+			IsHighSpeed:      tt.IsHighSpeed[index],
+		})
+	}
+	trainString = trainString + strconv.Itoa(int(tt.AllRunningTime))
+	return result, trainString
+}
+
+func ChangeToTemplate(railWays []dao.RailWay, limitStopTime int64) TemplateTrainSchedule {
+	schedule := TemplateTrainSchedule{
+		ID:               make([]uint, 0),
+		TrainNumber:      make([]string, 0),
+		TrainNo:          make([]string, 0),
+		DepartureStation: make([]string, 0),
+		DepartureTime:    make([]string, 0),
+		ArrivalStation:   make([]string, 0),
+		ArrivalTime:      make([]string, 0),
+		RunningTime:      make([]string, 0),
+		ArrivalDay:       make([]uint, 0),
+		IsHighSpeed:      make([]uint, 0),
+		AllRunningTime:   0,
+	}
+	for _, train := range railWays {
+		schedule.ID = append(schedule.ID, train.ID)
+		schedule.TrainNumber = append(schedule.TrainNumber, train.TrainNumber)
+		schedule.TrainNo = append(schedule.TrainNo, train.TrainNo)
+		schedule.DepartureStation = append(schedule.DepartureStation, train.DepartureStation)
+		schedule.DepartureTime = append(schedule.DepartureTime, train.DepartureTime)
+		schedule.ArrivalStation = append(schedule.ArrivalStation, train.ArrivalStation)
+		schedule.ArrivalTime = append(schedule.ArrivalTime, train.ArrivalTime)
+		schedule.RunningTime = append(schedule.RunningTime, train.RunningTime)
+		schedule.ArrivalDay = append(schedule.ArrivalDay, train.ArrivalDay)
+		schedule.IsHighSpeed = append(schedule.IsHighSpeed, train.IsHighSpeed)
+	}
+	schedule.AllRunningTime = uint(GetAllRunningTime(schedule, limitStopTime))
+	return schedule
+}
+func GetTransTime(arrivalTime, departureTime string, limitStopTime int64) int64 {
+	oDTime, _ := GetTime(departureTime)
+	oATime, _ := GetTime(arrivalTime)
+	StopTime := oDTime - oATime
+	if StopTime < limitStopTime {
+		StopTime = StopTime + 1440 //换乘时间小于最短时间，默认加1天
+	}
+	return StopTime
+}
+
+func GetAllRunningTime(templateTrainSchedule TemplateTrainSchedule, limitStopTime int64) int64 {
+	allTime := int64(0)
+	for index, runningTime := range templateTrainSchedule.RunningTime {
+		intRunningTime, _ := GetTime(runningTime)
+		transTime := int64(0)
+		if index != 0 {
+			transTime = GetTransTime(templateTrainSchedule.ArrivalTime[index-1], templateTrainSchedule.DepartureTime[index], limitStopTime)
+		}
+		allTime = allTime + intRunningTime + transTime
+	}
+	return allTime
+}
+
+func sortTemplateStructByLowRunningTime(result []TemplateTrainSchedule) []TemplateTrainSchedule {
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].AllRunningTime == result[j].AllRunningTime {
+			iDepartTime, _ := GetTime(result[i].DepartureTime[0])
+			jDepartTime, _ := GetTime(result[j].DepartureTime[0])
+			return iDepartTime < jDepartTime
+		}
+		return result[i].AllRunningTime < result[j].AllRunningTime
+	})
+	return result
+}
+
+func sortTemplateStructByHighRunningTime(result []TemplateTrainSchedule) []TemplateTrainSchedule {
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].AllRunningTime == result[j].AllRunningTime {
+			iDepartTime, _ := GetTime(result[i].DepartureTime[0])
+			jDepartTime, _ := GetTime(result[j].DepartureTime[0])
+			return iDepartTime < jDepartTime
+		}
+		return result[i].AllRunningTime > result[j].AllRunningTime
+	})
+	return result
+}
+
+func sortTemplateStructByEarlyFirst(result []TemplateTrainSchedule) []TemplateTrainSchedule {
+	sort.Slice(result, func(i, j int) bool {
+		iDepartTime, _ := GetTime(result[i].DepartureTime[0])
+		jDepartTime, _ := GetTime(result[j].DepartureTime[0])
+		if iDepartTime == jDepartTime {
+			return result[i].AllRunningTime < result[j].AllRunningTime
+		}
+		return iDepartTime < jDepartTime
+	})
+	return result
+}
+
+func sortTemplateStructByLateFirst(result []TemplateTrainSchedule) []TemplateTrainSchedule {
+	sort.Slice(result, func(i, j int) bool {
+		iDepartTime, _ := GetTime(result[i].DepartureTime[0])
+		jDepartTime, _ := GetTime(result[j].DepartureTime[0])
+		if iDepartTime == jDepartTime {
+			return result[i].AllRunningTime < result[j].AllRunningTime
+		}
+		return iDepartTime > jDepartTime
+	})
+	return result
 }
 
 func (r *RailWayServiceImpl) checkStation(stationName string) bool {
@@ -182,10 +378,22 @@ func sortByLateFirst(result []dao.RailWay) []dao.RailWay {
 	return result
 }
 
-func CombineTrainSchedule(departTrain, arrivalTrain []dao.RailWay) map[string][]dao.RailWay {
+func CombineTrainSchedule(departTrain, arrivalTrain []dao.RailWay, speedOption int) map[string][]dao.RailWay {
 	result := make(map[string][]dao.RailWay)
 	for _, dT := range departTrain {
+		if speedOption == OnlyHighSpeed && dT.IsHighSpeed == 0 {
+			continue
+		}
+		if speedOption == OnlyLowSpeed && dT.IsHighSpeed == 1 {
+			continue
+		}
 		for _, aT := range arrivalTrain {
+			if speedOption == OnlyHighSpeed && aT.IsHighSpeed == 0 {
+				continue
+			}
+			if speedOption == OnlyLowSpeed && aT.IsHighSpeed == 1 {
+				continue
+			}
 			if dT.ArrivalStation == aT.DepartureStation {
 				title := dT.TrainNumber + aT.TrainNumber
 				value, ok := result[title]
@@ -205,6 +413,18 @@ func CombineTrainSchedule(departTrain, arrivalTrain []dao.RailWay) map[string][]
 		}
 	}
 	return result
+}
+
+func resultDedUp(result []dao.RailWay) []dao.RailWay {
+	mapResult := make(map[string]dao.RailWay)
+	dedUpResult := make([]dao.RailWay, 0)
+	for _, train := range result {
+		mapResult[train.TrainNumber] = train
+	}
+	for _, train := range mapResult {
+		dedUpResult = append(dedUpResult, train)
+	}
+	return dedUpResult
 }
 
 func DownLoadRailWay() error {
@@ -229,7 +449,8 @@ func DownLoadRailWay() error {
 	}
 
 	original := make([]OriginalRailWay, 0)
-	railWays := make([]*dao.RailWay, 0)
+	mapOriginal := make(map[string]OriginalRailWay)
+	railWays := make([]dao.RailWay, 0)
 	sum := 0
 	for i, row := range rows {
 		if i == 0 {
@@ -253,39 +474,55 @@ func DownLoadRailWay() error {
 			RunningTime:     row[6],
 			ArrivalDay:      row[7],
 		}
-		if len(original) == 0 || originalRailway.TrainNumber != original[0].TrainNumber {
+		if len(original) == 0 || originalRailway.TrainNo != original[0].TrainNo {
 			originalRailway.StopTime = 0
 			original = make([]OriginalRailWay, 0) //清空
+			mapOriginal = make(map[string]OriginalRailWay)
 			original = append(original, originalRailway)
+			mapOriginal[original[0].ArrivalStation] = originalRailway
 		} else {
-			originalRailway.StopTime = CalculateStopTime(originalRailway.ArrivalTime, originalRailway.DepartureTime)
+			_, ok := mapOriginal[originalRailway.ArrivalStation]
+			if ok {
+				continue
+			}
+			if originalRailway.StationSequence == "01" {
+				originalRailway.StopTime = 0
+			} else {
+				originalRailway.StopTime = CalculateStopTime(originalRailway.ArrivalTime, originalRailway.DepartureTime)
+			}
 			for _, frontOriginalRailway := range original {
+				tFrontOriginalRailway := frontOriginalRailway
+				tOriginalRailway := originalRailway
+				if tFrontOriginalRailway.StationSequence > tOriginalRailway.StationSequence {
+					tFrontOriginalRailway, tOriginalRailway = tOriginalRailway, tFrontOriginalRailway
+				}
 				railWay := dao.RailWay{
-					TrainNumber:      frontOriginalRailway.TrainNumber,
-					TrainNo:          frontOriginalRailway.TrainNo,
-					DepartureStation: frontOriginalRailway.ArrivalStation,
-					DepartureTime:    frontOriginalRailway.DepartureTime,
-					ArrivalStation:   originalRailway.ArrivalStation,
-					ArrivalTime:      originalRailway.ArrivalTime,
+					TrainNumber:      tFrontOriginalRailway.TrainNumber,
+					TrainNo:          tFrontOriginalRailway.TrainNo,
+					DepartureStation: tFrontOriginalRailway.ArrivalStation,
+					DepartureTime:    tFrontOriginalRailway.DepartureTime,
+					ArrivalStation:   tOriginalRailway.ArrivalStation,
+					ArrivalTime:      tOriginalRailway.ArrivalTime,
 				}
 				if railWay.TrainNumber[0] == 'G' || railWay.TrainNumber[0] == 'D' || railWay.TrainNumber[0] == 'C' {
 					railWay.IsHighSpeed = 1
 				} else {
 					railWay.IsHighSpeed = 0
 				}
-				startTime, err := GetTime(frontOriginalRailway.RunningTime)
+				startTime, err := GetTime(tFrontOriginalRailway.RunningTime)
 				if err != nil {
 					return err
 				}
-				arriveTime, err := GetTime(originalRailway.RunningTime)
+				arriveTime, err := GetTime(tOriginalRailway.RunningTime)
 				if err != nil {
 					return err
 				}
-				runningTime := arriveTime - startTime - frontOriginalRailway.StopTime
-				//fmt.Println(railWay)
-				//fmt.Printf("arriveTime :%d startTime :%d runningTime: %d\n", arriveTime, startTime, runningTime)
-				//fmt.Printf("%s %s\n", originalRailway.ArrivalTime, originalRailway.DepartureTime)
-				//time.Sleep(1)
+				runningTime := arriveTime - startTime - tFrontOriginalRailway.StopTime
+				if runningTime < 0 {
+					fmt.Printf("runningTime<0 tFrontOriginalRailway:%v tOriginalRailway:%v\n", tFrontOriginalRailway, tOriginalRailway)
+					continue
+				}
+
 				railWay.RunningTime = TurnToTime(runningTime)
 				if runningTime < 1440 {
 					railWay.ArrivalDay = 0
@@ -294,18 +531,21 @@ func DownLoadRailWay() error {
 				} else {
 					railWay.ArrivalDay = 2
 				}
-				railWays = append(railWays, &railWay)
+				railWays = append(railWays, railWay)
 				sum = sum + 1
-				if sum%1000 == 0 {
-					fmt.Println(sum)
+				if sum%100 == 0 {
+					if sum%10000 == 0 {
+						fmt.Println(sum)
+					}
 					err = RailWayDAO.BatchCreateRailWays(railWays)
 					if err != nil {
 						return err
 					}
-					railWays = make([]*dao.RailWay, 0)
+					railWays = make([]dao.RailWay, 0)
 				}
 			}
 			original = append(original, originalRailway)
+			mapOriginal[originalRailway.ArrivalStation] = originalRailway
 		}
 	}
 	err = RailWayDAO.BatchCreateRailWays(railWays)
@@ -347,7 +587,7 @@ func OtherDay(inputDay string) int64 {
 func TurnToTime(inputTime int64) string {
 	hours := inputTime / 60
 	minutes := inputTime % 60
-	return strconv.Itoa(int(hours)) + ":" + strconv.Itoa(int(minutes))
+	return strconv.FormatInt(hours, 10) + ":" + strconv.FormatInt(minutes, 10)
 }
 
 func CalculateStopTime(aTime, dTime string) int64 {
@@ -366,4 +606,8 @@ func CompareTime(aTime, dTime string) bool {
 		return true
 	}
 	return false
+}
+
+func (r *RailWayServiceImpl) InitBuildGraph() {
+
 }

@@ -12,6 +12,8 @@ import (
 
 var StationService dao.StationDAO
 
+var KeyStation map[string]dao.Station
+
 func DownLoadStation() error {
 	file, err := excelize.OpenFile("车站信息.xlsx")
 	if err != nil {
@@ -97,6 +99,7 @@ func DownLoadStation() error {
 		}
 		for _, station := range Stations {
 			station.IsKeyStation = 1
+			KeyStation[station.StationName] = station
 			err = StationService.UpdateStation(&station)
 		}
 	}
