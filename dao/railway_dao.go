@@ -62,7 +62,7 @@ func (dao *RailWayDAOImpl) BatchCreateRailWays(railways []RailWay) error {
 
 func (dao *RailWayDAOImpl) GetRailWayByID(id int) (*RailWay, error) {
 	var railWay RailWay
-	result := dao.DB.First(&railWay, id)
+	result := dao.DB.Find(&railWay, id)
 	if result.Error != nil {
 		return nil, result.Error
 	}
@@ -71,7 +71,7 @@ func (dao *RailWayDAOImpl) GetRailWayByID(id int) (*RailWay, error) {
 
 func (dao *RailWayDAOImpl) GetRailWayByTrainNumber(trainNumber string) (*RailWay, error) {
 	var railWay RailWay
-	result := dao.DB.Where("train_number = ?", trainNumber).First(&railWay)
+	result := dao.DB.Where("train_number = ?", trainNumber).Find(&railWay)
 	if result.Error != nil {
 		return nil, result.Error
 	}
@@ -80,7 +80,7 @@ func (dao *RailWayDAOImpl) GetRailWayByTrainNumber(trainNumber string) (*RailWay
 
 func (dao *RailWayDAOImpl) GetRailWayByDepartureStation(name string) ([]RailWay, error) {
 	railWays := make([]RailWay, 0)
-	result := dao.DB.Where("departure_station = ?", name).First(&railWays)
+	result := dao.DB.Where("departure_station = ?", name).Find(&railWays)
 	if result.Error != nil {
 		return nil, result.Error
 	}
@@ -125,7 +125,7 @@ func (dao *RailWayDAOImpl) GetRailWayByDepartureStationAndArrivalStation(departu
 
 func (dao *RailWayDAOImpl) GetRailWayByDepartureStationAndArrivalStationOnlyHighSpeed(departureName, arrivalName string) ([]RailWay, error) {
 	railWays := make([]RailWay, 0)
-	result := dao.DB.Where("departure_station = ? and arrival_station = ? and is_high_speed = 1", departureName, arrivalName)
+	result := dao.DB.Where("departure_station = ? and arrival_station = ? and is_high_speed = 1", departureName, arrivalName).Find(&railWays)
 	if result.Error != nil {
 		return nil, result.Error
 	}
@@ -134,7 +134,7 @@ func (dao *RailWayDAOImpl) GetRailWayByDepartureStationAndArrivalStationOnlyHigh
 
 func (dao *RailWayDAOImpl) GetRailWayByDepartureStationAndArrivalStationOnlyLowSpeed(departureName, arrivalName string) ([]RailWay, error) {
 	railWays := make([]RailWay, 0)
-	result := dao.DB.Where("departure_station = ? and arrival_station = ? and is_high_speed = 0", departureName, arrivalName)
+	result := dao.DB.Where("departure_station = ? and arrival_station = ? and is_high_speed = 0", departureName, arrivalName).Find(&railWays)
 	if result.Error != nil {
 		return nil, result.Error
 	}

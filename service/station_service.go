@@ -107,3 +107,30 @@ func DownLoadStation() error {
 	log.Print("DownLoadStation success\n")
 	return nil
 }
+
+func DownLoadKeyStation() error {
+	data, err := os.ReadFile("站点选择.txt") // 确保文件路径正确
+	if err != nil {
+		fmt.Println("读取文件失败:", err)
+		return err
+	}
+
+	// 按换行符分割字符串
+	cities := strings.Split(string(data), "\n")
+	KeyStation = make(map[string]dao.Station)
+	// 去掉可能的空行
+	for _, city := range cities {
+		city = strings.TrimSpace(city)
+		Stations, err := StationService.GetStationByCityName(city)
+		if err != nil {
+			fmt.Printf("city:%v, err:%s\n", city, err)
+			return err
+		}
+		for _, station := range Stations {
+			KeyStation[station.StationName] = station
+		}
+	}
+
+	log.Print("DownLoadKeyStation success\n")
+	return nil
+}

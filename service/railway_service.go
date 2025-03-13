@@ -26,7 +26,10 @@ const (
 	HighPriceFirst = 6
 
 	GetAllResult    = 1
-	DefaultStopTime = 10
+	DefaultStopTime = 15
+
+	StartIndex = "Start"
+	EndIndex   = "End"
 )
 
 type OriginalRailWay struct {
@@ -70,10 +73,12 @@ type RailWayServiceImpl struct {
 var (
 	RailWayDAO dao.RailWayDAO
 	_          RailwayService = (*RailWayServiceImpl)(nil)
+	Graph                     = make(map[string][]dao.RailWay) //图，前面的string是图中的点，以D或者A开头（表示出发还是到达）加上站点名加上车次NO加上第几天的车；后面的[]是从这个点出发的边
+	//在站内转乘时TrainNumber记为Waiting，TrainNo为arrival的TrainNo，这样能够找到下一班车所在点
 )
 
-func NewRailwayService(RailWayDAO dao.RailWayDAO, StationDAO dao.StationDAO) RailwayService {
-	return &RailWayServiceImpl{
+func NewRailwayService(RailWayDAO dao.RailWayDAO, StationDAO dao.StationDAO) RailWayServiceImpl {
+	return RailWayServiceImpl{
 		RailWayDAO: RailWayDAO,
 		StationDAO: StationDAO,
 	}
@@ -378,6 +383,20 @@ func sortByLateFirst(result []dao.RailWay) []dao.RailWay {
 	return result
 }
 
+func sortByEarlyArriveFirst(result []dao.RailWay) []dao.RailWay {
+	sort.Slice(result, func(i, j int) bool {
+		iArrivalTime, _ := GetTime(result[i].ArrivalTime)
+		jArrivalTime, _ := GetTime(result[j].ArrivalTime)
+		if iArrivalTime == jArrivalTime {
+			iRunningTime, _ := GetTime(result[i].RunningTime)
+			jRunningTime, _ := GetTime(result[j].RunningTime)
+			return iRunningTime < jRunningTime
+		}
+		return iArrivalTime < jArrivalTime
+	})
+	return result
+}
+
 func CombineTrainSchedule(departTrain, arrivalTrain []dao.RailWay, speedOption int) map[string][]dao.RailWay {
 	result := make(map[string][]dao.RailWay)
 	for _, dT := range departTrain {
@@ -608,6 +627,216 @@ func CompareTime(aTime, dTime string) bool {
 	return false
 }
 
-func (r *RailWayServiceImpl) InitBuildGraph() {
+func (r *RailWayServiceImpl) AddNewStation(stationName string, isDeparture bool, startTime int64) error {
+	if isDeparture {
+		departureTrains, err := r.RailWayDAO.GetRailWayByDepartureStation(stationName)
+		if err != nil {
+			log.Fatal(err)
+			return err
+		}
+		departureTrains = getKeyTrains(departureTrains, true, 0)
+		for _, train := range departureTrains {
+			dTime, _ := GetTime(train.DepartureTime)
+			if startTime >= dTime {
+				value, ok := Graph[StartIndex]
+				if ok {
+					value = append(value, train)
+					Graph[StartIndex] = value
+				} else {
+					Graph[StartIndex] = []dao.RailWay{train}
+				}
+			}
+		}
+	} else {
+		arrivalTrains, err := r.RailWayDAO.GetRailWayByArrivalStation(stationName)
+		if err != nil {
+			log.Fatal(err)
+			return err
+		}
+		arrivalTrains = getKeyTrains(arrivalTrains, true, 0)
+		getKeyTrains(arrivalTrains, true, 1)
+		getKeyTrains(arrivalTrains, true, 2)
+		getKeyTrains(arrivalTrains, true, 3)
+	}
+	return nil
+}
 
+func (r *RailWayServiceImpl) InitBuildGraph() error {
+	for key, _ := range KeyStation {
+		arrivalTrains, err := r.RailWayDAO.GetRailWayByArrivalStation(key)
+		if err != nil {
+			log.Fatal(err)
+			return err
+		}
+		departureTrains, err := r.RailWayDAO.GetRailWayByDepartureStation(key)
+		if err != nil {
+			log.Fatal(err)
+			return err
+		}
+
+		arrivalTrains = getKeyTrains(arrivalTrains, true, 0)
+		departureTrains = getKeyTrains(departureTrains, true, 0)
+		getKeyTrains(arrivalTrains, true, 1)
+		getKeyTrains(arrivalTrains, true, 2)
+		getKeyTrains(arrivalTrains, true, 3)
+		getKeyTrains(departureTrains, true, 1)
+		getKeyTrains(departureTrains, true, 2)
+		getKeyTrains(departureTrains, true, 3)
+
+		departureTrains = sortByEarlyFirst(departureTrains)
+		arrivalTrains = sortByEarlyArriveFirst(arrivalTrains)
+
+		length := len(departureTrains)
+		for index, train := range departureTrains {
+			buildDepartureWaitingEdges(departureTrains[(index+1)%length], train, 0)
+		}
+		for index, train := range departureTrains {
+			buildDepartureWaitingEdges(departureTrains[(index+1)%length], train, 1)
+		}
+		for index, train := range departureTrains {
+			buildDepartureWaitingEdges(departureTrains[(index+1)%length], train, 2)
+		}
+		for index, train := range departureTrains {
+			buildDepartureWaitingEdges(departureTrains[(index+1)%length], train, 3)
+		}
+		buildArrivalToDepartureWaitingEdges(arrivalTrains, departureTrains, DefaultStopTime)
+	}
+	log.Printf("[InitBuildGraph] Building graph successfully")
+	return nil
+}
+
+func getKeyTrains(input []dao.RailWay, isAddGraph bool, dayTime int) []dao.RailWay {
+	result := make([]dao.RailWay, 0)
+	for _, v := range input {
+		if checkKeyStation(v.DepartureStation) && checkKeyStation(v.ArrivalStation) {
+			result = append(result, v)
+			if isAddGraph {
+				//加边
+				vv := v
+				vv.ArrivalDay = vv.ArrivalDay + uint(dayTime)
+				departIndex := "D/" + v.DepartureStation + "/" + v.TrainNo + "/" + strconv.Itoa(dayTime)
+				value, ok := Graph[departIndex]
+				if ok {
+					value = append(value, vv)
+					Graph[departIndex] = value
+				} else {
+					Graph[departIndex] = []dao.RailWay{vv}
+				}
+			}
+		}
+	}
+	return result
+}
+
+// 只要满足一个是关键站点即可
+func getOneKeyTrains(input []dao.RailWay, isAddGraph bool, dayTime int) []dao.RailWay {
+	result := make([]dao.RailWay, 0)
+	for _, v := range input {
+		if checkKeyStation(v.DepartureStation) || checkKeyStation(v.ArrivalStation) {
+			result = append(result, v)
+			if isAddGraph {
+				//加边
+				vv := v
+				vv.ArrivalDay = vv.ArrivalDay + uint(dayTime)
+				departIndex := "D/" + v.DepartureStation + "/" + v.TrainNo + "/" + strconv.Itoa(dayTime)
+				value, ok := Graph[departIndex]
+				if ok {
+					value = append(value, vv)
+					Graph[departIndex] = value
+				} else {
+					Graph[departIndex] = []dao.RailWay{vv}
+				}
+			}
+		}
+	}
+	return result
+}
+
+func buildDepartureWaitingEdges(arrival, departure dao.RailWay, arrivalDay int64) {
+	newEdge := dao.RailWay{
+		TrainNumber:      "Waiting",
+		TrainNo:          arrival.TrainNo,
+		DepartureStation: departure.DepartureStation,
+		ArrivalStation:   arrival.DepartureTime,
+		DepartureTime:    departure.DepartureTime,
+		ArrivalTime:      arrival.DepartureTime,
+		ArrivalDay:       uint(arrivalDay),
+	}
+	runningTime := CalculateStopTime(newEdge.ArrivalTime, newEdge.DepartureTime)
+	newEdge.RunningTime = TurnToTime(runningTime)
+	dTime, _ := GetTime(newEdge.DepartureTime)
+	aTime, _ := GetTime(newEdge.ArrivalTime)
+	if dTime > aTime {
+		newEdge.ArrivalDay = newEdge.ArrivalDay + 1
+	}
+	departIndex := "D/" + newEdge.DepartureStation + "/" + departure.TrainNo + "/" + strconv.FormatInt(arrivalDay, 10)
+	value, ok := Graph[departIndex]
+	if ok {
+		value = append(value, newEdge)
+		Graph[departIndex] = value
+	} else {
+		Graph[departIndex] = []dao.RailWay{newEdge}
+	}
+	return
+}
+
+func checkKeyStation(stationName string) bool {
+	_, ok := KeyStation[stationName]
+	return ok
+}
+func buildArrivalToDepartureWaitingEdges(arrivalTrains, departureTrains []dao.RailWay, limitStopTime int64) {
+	dIndex := 0
+	dLength := len(departureTrains)
+	if dLength == 0 {
+		return
+	}
+	for _, arrival := range arrivalTrains {
+		isSuccess := false
+		for i := dIndex; i < dLength; i++ {
+			aTime, _ := GetTime(arrival.ArrivalTime)
+			dTime, _ := GetTime(departureTrains[dIndex].DepartureTime)
+			if aTime+limitStopTime <= dTime {
+				turnADToEdges(arrival, departureTrains[dIndex], 0)
+				turnADToEdges(arrival, departureTrains[dIndex], 1)
+				turnADToEdges(arrival, departureTrains[dIndex], 2)
+				turnADToEdges(arrival, departureTrains[dIndex], 3)
+				isSuccess = true
+				dIndex = i
+			}
+			dIndex = i
+		}
+		if !isSuccess {
+			turnADToEdges(arrival, departureTrains[0], 0)
+			turnADToEdges(arrival, departureTrains[0], 1)
+			turnADToEdges(arrival, departureTrains[0], 2)
+			turnADToEdges(arrival, departureTrains[0], 3)
+		}
+	}
+}
+
+func turnADToEdges(arrival, departure dao.RailWay, arrivalDay int64) {
+	newEdge := dao.RailWay{
+		TrainNumber:      "Waiting",
+		TrainNo:          departure.TrainNo,
+		DepartureStation: arrival.ArrivalStation,
+		ArrivalStation:   departure.DepartureStation,
+		DepartureTime:    arrival.ArrivalTime,
+		ArrivalTime:      departure.DepartureTime,
+		ArrivalDay:       uint(arrivalDay),
+	}
+	runningTime := CalculateStopTime(newEdge.ArrivalTime, newEdge.DepartureTime)
+	newEdge.RunningTime = TurnToTime(runningTime)
+	dTime, _ := GetTime(newEdge.DepartureTime)
+	aTime, _ := GetTime(newEdge.ArrivalTime)
+	if dTime > aTime {
+		newEdge.ArrivalDay = newEdge.ArrivalDay + 1
+	}
+	arrivalIndex := "A/" + newEdge.DepartureStation + "/" + arrival.TrainNo + "/" + strconv.FormatInt(arrivalDay, 10)
+	value, ok := Graph[arrivalIndex]
+	if ok {
+		value = append(value, newEdge)
+		Graph[arrivalIndex] = value
+	} else {
+		Graph[arrivalIndex] = []dao.RailWay{newEdge}
+	}
 }
