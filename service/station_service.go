@@ -87,21 +87,19 @@ func DownLoadStation() error {
 	}
 
 	// 按换行符分割字符串
-	cities := strings.Split(string(data), "\n")
-
+	stationNames := strings.Split(string(data), "\n")
+	KeyStation = make(map[string]dao.Station)
 	// 去掉可能的空行
-	for _, city := range cities {
-		city = strings.TrimSpace(city)
-		Stations, err := StationService.GetStationByCityName(city)
+	for _, stationName := range stationNames {
+		stationName = strings.TrimSpace(stationName)
+		station, err := StationService.GetStationByName(stationName)
 		if err != nil {
-			fmt.Printf("city:%v, err:%s\n", city, err)
+			fmt.Printf("city:%v, err:%s\n", station, err)
 			return err
 		}
-		for _, station := range Stations {
-			station.IsKeyStation = 1
-			KeyStation[station.StationName] = station
-			err = StationService.UpdateStation(&station)
-		}
+		station.IsKeyStation = 1
+		KeyStation[station.StationName] = *station
+		err = StationService.UpdateStation(station)
 	}
 
 	log.Print("DownLoadStation success\n")
@@ -121,14 +119,12 @@ func DownLoadKeyStation() error {
 	// 去掉可能的空行
 	for _, city := range cities {
 		city = strings.TrimSpace(city)
-		Stations, err := StationService.GetStationByCityName(city)
+		Stations, err := StationService.GetStationByName(city)
 		if err != nil {
 			fmt.Printf("city:%v, err:%s\n", city, err)
 			return err
 		}
-		for _, station := range Stations {
-			KeyStation[station.StationName] = station
-		}
+		KeyStation[Stations.StationName] = *Stations
 	}
 
 	log.Print("DownLoadKeyStation success\n")

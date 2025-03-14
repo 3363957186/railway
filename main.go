@@ -16,7 +16,7 @@ func main() {
 	if err != nil {
 		fmt.Println(err)
 	}
-	//err := service.DownLoadStation()
+	//err = service.DownLoadStation()
 	//if err != nil {
 	//	fmt.Println(err)
 	//}

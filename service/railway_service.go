@@ -1,10 +1,12 @@
 package service
 
 import (
+	"container/heap"
 	"errors"
 	"fmt"
 	"github.com/xuri/excelize/v2"
 	"log"
+	"math"
 	"railway/dao"
 	"sort"
 	"strconv"
@@ -56,6 +58,19 @@ type TemplateTrainSchedule struct {
 	ArrivalDay       []uint
 	IsHighSpeed      []uint
 	AllRunningTime   uint
+}
+
+type AnalyseTrans struct {
+	NowTrainNumber  string
+	NowTrainNo      string
+	NowStation      string
+	NowStatus       string //所在点是Arrive点还是Depart点
+	TrainNumber     []string
+	TrainNo         []string
+	StationSequence []string
+	AllRunningTime  int64
+	TransFerTimes   int64 //中转次数
+	NowArrivalDay   int64 //目前所在第几天
 }
 
 type RailwayService interface {
@@ -656,13 +671,24 @@ func (r *RailWayServiceImpl) AddNewStation(stationName string, isDeparture bool,
 		arrivalTrains = getKeyTrains(arrivalTrains, true, 0)
 		getKeyTrains(arrivalTrains, true, 1)
 		getKeyTrains(arrivalTrains, true, 2)
-		getKeyTrains(arrivalTrains, true, 3)
 	}
 	return nil
 }
 
 func (r *RailWayServiceImpl) InitBuildGraph() error {
+	/**
+	可以将构造图的模式调整成完全图，不使用KeyStation来构造图，这样构造出来的整个图是所有列车运行时刻表形成的图
+	总计150w边+50w点，对于大型服务器来说，以这个数据量去跑最短路还是可行的，但是单台电脑不太行
+	**/
+
+	//allStation, err := r.StationDAO.GetAllStations()
+	//if err != nil {
+	//	return err
+	//}
+	//for _, station := range allStation {
 	for key, _ := range KeyStation {
+		//key := station.StationName
+		//fmt.Println(key)
 		arrivalTrains, err := r.RailWayDAO.GetRailWayByArrivalStation(key)
 		if err != nil {
 			log.Fatal(err)
@@ -673,18 +699,17 @@ func (r *RailWayServiceImpl) InitBuildGraph() error {
 			log.Fatal(err)
 			return err
 		}
+		departureTrains = sortByEarlyArriveFirst(departureTrains)
+		arrivalTrains = sortByEarlyArriveFirst(arrivalTrains)
 
 		arrivalTrains = getKeyTrains(arrivalTrains, true, 0)
 		departureTrains = getKeyTrains(departureTrains, true, 0)
 		getKeyTrains(arrivalTrains, true, 1)
 		getKeyTrains(arrivalTrains, true, 2)
-		getKeyTrains(arrivalTrains, true, 3)
 		getKeyTrains(departureTrains, true, 1)
 		getKeyTrains(departureTrains, true, 2)
-		getKeyTrains(departureTrains, true, 3)
 
 		departureTrains = sortByEarlyFirst(departureTrains)
-		arrivalTrains = sortByEarlyArriveFirst(arrivalTrains)
 
 		length := len(departureTrains)
 		for index, train := range departureTrains {
@@ -696,9 +721,6 @@ func (r *RailWayServiceImpl) InitBuildGraph() error {
 		for index, train := range departureTrains {
 			buildDepartureWaitingEdges(departureTrains[(index+1)%length], train, 2)
 		}
-		for index, train := range departureTrains {
-			buildDepartureWaitingEdges(departureTrains[(index+1)%length], train, 3)
-		}
 		buildArrivalToDepartureWaitingEdges(arrivalTrains, departureTrains, DefaultStopTime)
 	}
 	log.Printf("[InitBuildGraph] Building graph successfully")
@@ -707,8 +729,14 @@ func (r *RailWayServiceImpl) InitBuildGraph() error {
 
 func getKeyTrains(input []dao.RailWay, isAddGraph bool, dayTime int) []dao.RailWay {
 	result := make([]dao.RailWay, 0)
+	rememberTrainNo := make(map[string]string)
 	for _, v := range input {
+		_, ok := rememberTrainNo[v.TrainNo]
+		if ok {
+			continue
+		}
 		if checkKeyStation(v.DepartureStation) && checkKeyStation(v.ArrivalStation) {
+			rememberTrainNo[v.TrainNo] = v.TrainNo
 			result = append(result, v)
 			if isAddGraph {
 				//加边
@@ -791,6 +819,15 @@ func buildArrivalToDepartureWaitingEdges(arrivalTrains, departureTrains []dao.Ra
 		return
 	}
 	for _, arrival := range arrivalTrains {
+		for _, departure := range departureTrains {
+			if arrival.TrainNo == departure.TrainNo {
+				turnADToEdges(arrival, departureTrains[dIndex], 0)
+				turnADToEdges(arrival, departureTrains[dIndex], 1)
+				turnADToEdges(arrival, departureTrains[dIndex], 2)
+			}
+		}
+	}
+	for _, arrival := range arrivalTrains {
 		isSuccess := false
 		for i := dIndex; i < dLength; i++ {
 			aTime, _ := GetTime(arrival.ArrivalTime)
@@ -799,7 +836,6 @@ func buildArrivalToDepartureWaitingEdges(arrivalTrains, departureTrains []dao.Ra
 				turnADToEdges(arrival, departureTrains[dIndex], 0)
 				turnADToEdges(arrival, departureTrains[dIndex], 1)
 				turnADToEdges(arrival, departureTrains[dIndex], 2)
-				turnADToEdges(arrival, departureTrains[dIndex], 3)
 				isSuccess = true
 				dIndex = i
 			}
@@ -809,7 +845,6 @@ func buildArrivalToDepartureWaitingEdges(arrivalTrains, departureTrains []dao.Ra
 			turnADToEdges(arrival, departureTrains[0], 0)
 			turnADToEdges(arrival, departureTrains[0], 1)
 			turnADToEdges(arrival, departureTrains[0], 2)
-			turnADToEdges(arrival, departureTrains[0], 3)
 		}
 	}
 }
@@ -839,4 +874,65 @@ func turnADToEdges(arrival, departure dao.RailWay, arrivalDay int64) {
 	} else {
 		Graph[arrivalIndex] = []dao.RailWay{newEdge}
 	}
+}
+
+func Dijkstra(graph map[string][]Edge, start string) map[string]AnalyseTrans {
+	// 初始化最短路径映射
+	dist := make(map[string]AnalyseTrans)
+
+	// 初始化所有点的路径值为最大
+	for node := range graph {
+		dist[node] = AnalyseTrans{
+			AllRunningTime: math.MaxInt64,
+			TransFerTimes:  math.MaxInt64,
+		}
+	}
+	dist[start] = AnalyseTrans{
+		AllRunningTime: 0,
+		TransFerTimes:  0,
+	}
+
+	// 初始化最小堆
+	pq := &PriorityQueue{}
+	heap.Init(pq)
+	heap.Push(pq, &Item{node: start, allTime: 0, transferTimes: 0})
+
+	// 运行 Dijkstra
+	for pq.Len() > 0 {
+		curr := heap.Pop(pq).(*Item)
+		currNode, currTime, currTransfers := curr.node, curr.allTime, curr.transferTimes
+
+		// 如果当前路径已经不是最短路径，则跳过
+		if currTime > dist[currNode].AllRunningTime ||
+			(currTime == dist[currNode].AllRunningTime && currTransfers > dist[currNode].TransFerTimes) {
+			continue
+		}
+
+		// 遍历邻接点
+		for _, edge := range graph[currNode] {
+			nextNode, travelTime, transfers := edge.To, edge.AllRunningTime, edge.TransFerTimes
+			newTime := currTime + travelTime
+			newTransfers := currTransfers + transfers
+
+			// 如果找到更优路径，则更新
+			if newTime < dist[nextNode].AllRunningTime ||
+				(newTime == dist[nextNode].AllRunningTime && newTransfers < dist[nextNode].TransFerTimes) {
+				dist[nextNode] = AnalyseTrans{
+					NowTrainNumber:  dist[currNode].NowTrainNumber,
+					NowTrainNo:      dist[currNode].NowTrainNo,
+					NowStation:      nextNode,
+					NowStatus:       "Arrive",
+					TrainNumber:     append(dist[currNode].TrainNumber, dist[currNode].NowTrainNumber),
+					TrainNo:         append(dist[currNode].TrainNo, dist[currNode].NowTrainNo),
+					StationSequence: append(dist[currNode].StationSequence, nextNode),
+					AllRunningTime:  newTime,
+					TransFerTimes:   newTransfers,
+					NowArrivalDay:   dist[currNode].NowArrivalDay,
+				}
+				heap.Push(pq, &Item{node: nextNode, allTime: newTime, transferTimes: newTransfers})
+			}
+		}
+	}
+
+	return dist
 }
