@@ -672,7 +672,7 @@ func (r *RailWayServiceImpl) AddNewStation(stationName string, isDeparture bool,
 			log.Fatal(err)
 			return err
 		}
-		fmt.Println(departureTrains)
+		//fmt.Println(departureTrains)
 		departureTrains = getOneKeyTrains(departureTrains, false, 0, false)
 		fmt.Println(departureTrains)
 		for _, train := range departureTrains {
@@ -699,6 +699,7 @@ func (r *RailWayServiceImpl) AddNewStation(stationName string, isDeparture bool,
 			return err
 		}
 		arrivalTrains = getOneKeyTrains(arrivalTrains, false, 0, false)
+		fmt.Println(arrivalTrains)
 		getOneKeyTrains(arrivalTrains, true, 0, true)
 		getOneKeyTrains(arrivalTrains, true, 1, true)
 		getOneKeyTrains(arrivalTrains, true, 2, true)
@@ -836,8 +837,14 @@ func getKeyTrains(input []dao.RailWay, isAddGraph bool, dayTime int) []dao.RailW
 // 只要满足一个是关键站点即可
 func getOneKeyTrains(input []dao.RailWay, isAddGraph bool, dayTime int, IsTemplate bool) []dao.RailWay {
 	result := make([]dao.RailWay, 0)
+	rememberTrainNo := make(map[string]string)
 	for _, v := range input {
+		_, ok := rememberTrainNo[v.TrainNo]
+		if ok {
+			continue
+		}
 		if checkKeyStation(v.DepartureStation) || checkKeyStation(v.ArrivalStation) {
+			rememberTrainNo[v.TrainNo] = v.TrainNo
 			result = append(result, v)
 			if isAddGraph {
 				//加边
@@ -865,17 +872,23 @@ func buildDepartureWaitingEdges(arrival, departure dao.RailWay, arrivalDay int64
 		TrainNumber:      Waiting,
 		TrainNo:          arrival.TrainNo,
 		DepartureStation: departure.DepartureStation,
-		ArrivalStation:   arrival.DepartureTime,
+		ArrivalStation:   arrival.DepartureStation,
 		DepartureTime:    departure.DepartureTime,
 		ArrivalTime:      arrival.DepartureTime,
 		ArrivalDay:       uint(arrivalDay),
 	}
-	runningTime := CalculateStopTime(newEdge.ArrivalTime, newEdge.DepartureTime)
+	if newEdge.ArrivalStation != newEdge.DepartureStation {
+		fmt.Println("[buildDepartureWaitingEdges] WRONG!!!")
+		fmt.Println(arrival, departure)
+		return
+	}
+	runningTime := CalculateStopTime(newEdge.DepartureTime, newEdge.ArrivalTime)
 	newEdge.RunningTime = TurnToTime(runningTime)
 	dTime, _ := GetTime(newEdge.DepartureTime)
 	aTime, _ := GetTime(newEdge.ArrivalTime)
 	if dTime > aTime {
 		newEdge.ArrivalDay = newEdge.ArrivalDay + 1
+		arrivalDay = arrivalDay + 1
 	}
 	departIndex := "D/" + newEdge.DepartureStation + "/" + departure.TrainNo + "/" + strconv.FormatInt(arrivalDay, 10)
 	value, ok := Graph[departIndex]
@@ -939,12 +952,18 @@ func turnADToEdges(arrival, departure dao.RailWay, arrivalDay int64, isTemplate 
 		ArrivalTime:      departure.DepartureTime,
 		ArrivalDay:       uint(arrivalDay),
 	}
-	runningTime := CalculateStopTime(newEdge.ArrivalTime, newEdge.DepartureTime)
+	if newEdge.ArrivalStation != newEdge.DepartureStation {
+		fmt.Println("[turnADToEdges] WRONG!!!")
+		fmt.Println(arrival, departure)
+		return
+	}
+	runningTime := CalculateStopTime(newEdge.DepartureTime, newEdge.ArrivalTime)
 	newEdge.RunningTime = TurnToTime(runningTime)
 	dTime, _ := GetTime(newEdge.DepartureTime)
 	aTime, _ := GetTime(newEdge.ArrivalTime)
 	if dTime > aTime {
 		newEdge.ArrivalDay = newEdge.ArrivalDay + 1
+		arrivalDay = arrivalDay + 1
 	}
 	arrivalIndex := "A/" + newEdge.DepartureStation + "/" + arrival.TrainNo + "/" + strconv.FormatInt(arrivalDay, 10)
 	if isTemplate {
@@ -960,25 +979,31 @@ func turnADToEdges(arrival, departure dao.RailWay, arrivalDay int64, isTemplate 
 }
 
 func Dijkstra(startStation, endStation string, forbidTrain []string, maxTrans, speedOption int64) AnalyseTrans {
-	for key, value := range Graph {
-		stringIndex := strings.Split(key, "/")
-		if len(stringIndex) > 2 && stringIndex[1] == "乌鲁木齐" {
-			fmt.Println(value)
-		}
-	}
+	//for key, value := range Graph {
+	//	stringIndex := strings.Split(key, "/")
+	//	if len(stringIndex) > 2 && stringIndex[1] == "乌鲁木齐" {
+	//		fmt.Println(value)
+	//	}
+	//}
 
 	// 初始化最短路径映射
-	dist := make(map[string]AnalyseTrans)
+	dist := make([]map[string]AnalyseTrans, 0)
+	for i := int64(0); i <= maxTrans; i++ {
+		dist = append(dist, make(map[string]AnalyseTrans))
+	}
 	// 初始化所有点的路径值为最大
 	for node := range Graph {
-		dist[node] = AnalyseTrans{
-			AllRunningTime: math.MaxInt64,
-			TransFerTimes:  math.MaxInt64,
+		for i := int64(0); i <= maxTrans; i++ {
+			dist[i][node] = AnalyseTrans{
+				AllRunningTime: math.MaxInt64,
+				TransFerTimes:  math.MaxInt64,
+			}
 		}
 	}
-	dist[StartIndex] = AnalyseTrans{
+	dist[0][StartIndex] = AnalyseTrans{
 		AllRunningTime:  0,
 		TransFerTimes:   0,
+		NowStatus:       "A",
 		TrainNumber:     []string{},
 		TrainNo:         []string{},
 		StationSequence: []string{},
@@ -994,18 +1019,28 @@ func Dijkstra(startStation, endStation string, forbidTrain []string, maxTrans, s
 		curr := heap.Pop(pq).(*Item)
 		currNode, currTime, currTransfers := curr.node, curr.allTime, curr.transferTimes
 		// 如果当前路径已经不是最短路径，则跳过
-		if currTime > dist[currNode].AllRunningTime ||
-			(currTime == dist[currNode].AllRunningTime && currTransfers > dist[currNode].TransFerTimes) {
+		if currTime > dist[currTransfers][currNode].AllRunningTime ||
+			(currTime == dist[currTransfers][currNode].AllRunningTime && currTransfers > dist[currTransfers][currNode].TransFerTimes) {
 			continue
 		}
+		//if dist[currTransfers][currNode].NowTrainNumber != Waiting {
+		//	fmt.Println(dist[currTransfers][currNode])
+		//}
 		indexString := strings.Split(currNode, "/")
 		if len(indexString) > 1 && indexString[1] == endStation {
-			return dist[currNode]
+			return dist[currTransfers][currNode]
 		}
-		//fmt.Println(currNode)
+		//fmt.Println(dist[currTransfers][currNode])
 		// 遍历邻接点
+		if currNode == StartIndex {
+			fmt.Println(Graph[currNode])
+		}
 		for _, edge := range Graph[currNode] {
 			if isInForbid(edge.TrainNo, forbidTrain) {
+				continue
+			}
+			//超过三天的行程不记录
+			if edge.ArrivalDay > 2 {
 				continue
 			}
 			var (
@@ -1014,6 +1049,7 @@ func Dijkstra(startStation, endStation string, forbidTrain []string, maxTrans, s
 				travelTime int64
 				transfers  int64
 			)
+
 			if edge.TrainNumber == Waiting {
 				nextNode = "D/" + edge.ArrivalStation + "/" + edge.TrainNo + "/" + strconv.Itoa(int(edge.ArrivalDay))
 				status = "D"
@@ -1022,37 +1058,42 @@ func Dijkstra(startStation, endStation string, forbidTrain []string, maxTrans, s
 				status = "A"
 			}
 			travelTime, _ = GetTime(edge.RunningTime)
-			if edge.TrainNumber == Waiting || (len(indexString) > 2 && dist[currNode].NowTrainNo == edge.TrainNo) {
+			if currNode[0] == 'D' || edge.TrainNo == dist[currTransfers][currNode].NowTrainNo {
 				transfers = 0
 			} else {
 				transfers = 1
 			}
+
 			newTime := currTime + travelTime
 			newTransfers := currTransfers + transfers
 			if newTransfers > maxTrans {
 				continue
 			}
 			// 如果找到更优路径，则更新
-			if newTime < dist[nextNode].AllRunningTime ||
-				(newTime == dist[nextNode].AllRunningTime && newTransfers < dist[nextNode].TransFerTimes) {
+			if currNode == StartIndex {
+				fmt.Println(newTransfers, nextNode, dist[newTransfers][nextNode].AllRunningTime)
+			}
+			if newTime < dist[newTransfers][nextNode].AllRunningTime ||
+				(newTime == dist[newTransfers][nextNode].AllRunningTime && newTransfers < dist[newTransfers][nextNode].TransFerTimes) {
 				newAnalyseTrans := AnalyseTrans{
 					NowTrainNumber:  edge.TrainNumber,
 					NowTrainNo:      edge.TrainNo,
 					NowStation:      edge.ArrivalStation,
 					NowStatus:       status,
-					TrainNumber:     dist[currNode].TrainNumber,
-					TrainNo:         dist[currNode].TrainNo,
-					StationSequence: dist[currNode].StationSequence,
+					TrainNumber:     dist[currTransfers][currNode].TrainNumber,
+					TrainNo:         dist[currTransfers][currNode].TrainNo,
+					StationSequence: dist[currTransfers][currNode].StationSequence,
 					AllRunningTime:  newTime,
 					TransFerTimes:   newTransfers,
 					NowArrivalDay:   int64(edge.ArrivalDay),
 				}
-				//if transfers == 1 {
-				newAnalyseTrans.TrainNumber = append(newAnalyseTrans.TrainNumber, edge.TrainNumber)
-				newAnalyseTrans.TrainNo = append(newAnalyseTrans.TrainNo, edge.TrainNo)
-				newAnalyseTrans.StationSequence = append(newAnalyseTrans.StationSequence, edge.ArrivalStation)
-				//}
-				dist[nextNode] = newAnalyseTrans
+				if edge.TrainNumber != Waiting {
+					newAnalyseTrans.TrainNumber = append(newAnalyseTrans.TrainNumber, edge.TrainNumber)
+					newAnalyseTrans.TrainNo = append(newAnalyseTrans.TrainNo, edge.TrainNo)
+					newAnalyseTrans.StationSequence = append(newAnalyseTrans.StationSequence, edge.ArrivalStation)
+				}
+				dist[newTransfers][nextNode] = newAnalyseTrans
+
 				heap.Push(pq, &Item{node: nextNode, allTime: newTime, transferTimes: newTransfers})
 			}
 		}

@@ -68,5 +68,5 @@ func main() {
 	//for key, value := range resultMap {
 	//	fmt.Println(key, value)
 	//}
-	_, _ = RailwayService.SearchWithTwoTrans("伊宁", "海口", service.Default, service.Default, service.DefaultStopTime, service.Default)
+	_, _ = RailwayService.SearchWithTwoTrans("长白山", "杭州东", service.Default, service.Default, service.DefaultStopTime, service.Default)
 }
