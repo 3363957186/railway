@@ -57,7 +57,7 @@ func main() {
 	for _, record := range result {
 		fmt.Println(record)
 	}
-	result, err = RailwayService.SearchDirectly("郑州", "上海", 0, 0)
+	result, err = RailwayService.SearchDirectly("杭州", "沈阳北", 0, 0)
 	if err != nil {
 		fmt.Println(err)
 	}

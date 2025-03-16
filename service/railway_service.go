@@ -95,6 +95,7 @@ var (
 
 	NeedDeleteEdge      = make(map[string]string)        //记录临时添加的点和边，后续需要删除
 	KeyStationDeparture = make(map[string][]dao.RailWay) //记录关键站点的所有离开的车
+	KeyStationArrival   = make(map[string][]dao.RailWay) //记录关键站点的所有到达的车
 )
 
 func NewRailwayService(RailWayDAO dao.RailWayDAO, StationDAO dao.StationDAO) RailWayServiceImpl {
@@ -174,7 +175,7 @@ func (r *RailWayServiceImpl) SearchWithTwoTrans(departureStation, arrivalStation
 		log.Printf("[SearchWithTwoTrans ] err:%s", err.Error())
 		return nil, err
 	}
-	result := Dijkstra(departureStation, arrivalStation, []string{}, 3, Default)
+	result := Dijkstra(departureStation, arrivalStation, []string{}, 2, Default)
 	fmt.Println(result.AllRunningTime)
 	fmt.Println(result.TrainNumber)
 	fmt.Println(result)
@@ -581,9 +582,9 @@ func DownLoadRailWay() error {
 				}
 
 				railWay.RunningTime = TurnToTime(runningTime)
-				if runningTime < 1440 {
+				if runningTime+startTime < 1440 {
 					railWay.ArrivalDay = 0
-				} else if runningTime < 2880 {
+				} else if runningTime+startTime < 2880 {
 					railWay.ArrivalDay = 1
 				} else {
 					railWay.ArrivalDay = 2
@@ -717,8 +718,6 @@ func AddStationTrans(arriveTrain dao.RailWay, departureKeyTrains []dao.RailWay, 
 	}
 	for _, train := range departureKeyTrains {
 		if train.TrainNo == arriveTrain.TrainNo {
-			turnADToEdges(arriveTrain, train, 0, true)
-			turnADToEdges(arriveTrain, train, 1, true)
 			turnADToEdges(arriveTrain, train, 2, true)
 			//fmt.Println(arriveTrain, train)
 		}
@@ -727,15 +726,11 @@ func AddStationTrans(arriveTrain dao.RailWay, departureKeyTrains []dao.RailWay, 
 		aTime, _ := GetTime(arriveTrain.ArrivalTime)
 		dTime, _ := GetTime(train.DepartureTime)
 		if aTime+limitStopTime < dTime && train.TrainNo != arriveTrain.TrainNo {
-			turnADToEdges(arriveTrain, train, 0, true)
-			turnADToEdges(arriveTrain, train, 1, true)
 			turnADToEdges(arriveTrain, train, 2, true)
 			fmt.Println(arriveTrain, train)
 			return
 		}
 	}
-	turnADToEdges(arriveTrain, departureKeyTrains[0], 0, true)
-	turnADToEdges(arriveTrain, departureKeyTrains[0], 1, true)
 	turnADToEdges(arriveTrain, departureKeyTrains[0], 2, true)
 	//fmt.Println(arriveTrain, departureKeyTrains[0])
 }
@@ -796,12 +791,6 @@ func (r *RailWayServiceImpl) InitBuildGraph() error {
 		departureTrains = sortByEarlyFirst(departureTrains)
 		KeyStationDeparture[key] = departureTrains
 		length := len(departureTrains)
-		for index, train := range departureTrains {
-			buildDepartureWaitingEdges(departureTrains[(index+1)%length], train, 0)
-		}
-		for index, train := range departureTrains {
-			buildDepartureWaitingEdges(departureTrains[(index+1)%length], train, 1)
-		}
 		for index, train := range departureTrains {
 			buildDepartureWaitingEdges(departureTrains[(index+1)%length], train, 2)
 		}
@@ -890,36 +879,38 @@ func getOneKeyTrains(input []dao.RailWay, isAddGraph bool, dayTime int, IsTempla
 	return result
 }
 
-func buildDepartureWaitingEdges(arrival, departure dao.RailWay, arrivalDay int64) {
-	newEdge := dao.RailWay{
-		TrainNumber:      Waiting,
-		TrainNo:          arrival.TrainNo,
-		DepartureStation: departure.DepartureStation,
-		ArrivalStation:   arrival.DepartureStation,
-		DepartureTime:    departure.DepartureTime,
-		ArrivalTime:      arrival.DepartureTime,
-		ArrivalDay:       uint(arrivalDay),
-	}
-	if newEdge.ArrivalStation != newEdge.DepartureStation {
-		fmt.Println("[buildDepartureWaitingEdges] WRONG!!!")
-		fmt.Println(arrival, departure)
-		return
-	}
-	runningTime := CalculateStopTime(newEdge.DepartureTime, newEdge.ArrivalTime)
-	newEdge.RunningTime = TurnToTime(runningTime)
-	dTime, _ := GetTime(newEdge.DepartureTime)
-	aTime, _ := GetTime(newEdge.ArrivalTime)
-	if dTime > aTime {
-		newEdge.ArrivalDay = newEdge.ArrivalDay + 1
-		arrivalDay = arrivalDay + 1
-	}
-	departIndex := "D/" + newEdge.DepartureStation + "/" + departure.TrainNo + "/" + strconv.FormatInt(arrivalDay, 10)
-	value, ok := Graph[departIndex]
-	if ok {
-		value = append(value, newEdge)
-		Graph[departIndex] = value
-	} else {
-		Graph[departIndex] = []dao.RailWay{newEdge}
+func buildDepartureWaitingEdges(arrival, departure dao.RailWay, maxArrivalDay int64) {
+	for arrivalDay := int64(0); arrivalDay <= maxArrivalDay; arrivalDay++ {
+		newEdge := dao.RailWay{
+			TrainNumber:      Waiting,
+			TrainNo:          arrival.TrainNo,
+			DepartureStation: departure.DepartureStation,
+			ArrivalStation:   arrival.DepartureStation,
+			DepartureTime:    departure.DepartureTime,
+			ArrivalTime:      arrival.DepartureTime,
+			ArrivalDay:       uint(arrivalDay),
+		}
+		if newEdge.ArrivalStation != newEdge.DepartureStation {
+			fmt.Println("[buildDepartureWaitingEdges] WRONG!!!")
+			fmt.Println(arrival, departure)
+			return
+		}
+		runningTime := CalculateStopTime(newEdge.DepartureTime, newEdge.ArrivalTime)
+		newEdge.RunningTime = TurnToTime(runningTime)
+		dTime, _ := GetTime(newEdge.DepartureTime)
+		aTime, _ := GetTime(newEdge.ArrivalTime)
+		if dTime > aTime {
+			newEdge.ArrivalDay = newEdge.ArrivalDay + 1
+			arrivalDay = arrivalDay + 1
+		}
+		departIndex := "D/" + newEdge.DepartureStation + "/" + departure.TrainNo + "/" + strconv.FormatInt(arrivalDay, 10)
+		value, ok := Graph[departIndex]
+		if ok {
+			value = append(value, newEdge)
+			Graph[departIndex] = value
+		} else {
+			Graph[departIndex] = []dao.RailWay{newEdge}
+		}
 	}
 	return
 }
@@ -937,8 +928,6 @@ func buildArrivalToDepartureWaitingEdges(arrivalTrains, departureTrains []dao.Ra
 	for _, arrival := range arrivalTrains {
 		for _, departure := range departureTrains {
 			if arrival.TrainNo == departure.TrainNo {
-				turnADToEdges(arrival, departure, 0, false)
-				turnADToEdges(arrival, departure, 1, false)
 				turnADToEdges(arrival, departure, 2, false)
 			}
 		}
@@ -949,8 +938,6 @@ func buildArrivalToDepartureWaitingEdges(arrivalTrains, departureTrains []dao.Ra
 			aTime, _ := GetTime(arrival.ArrivalTime)
 			dTime, _ := GetTime(departureTrains[dIndex].DepartureTime)
 			if aTime+limitStopTime <= dTime && arrival.TrainNo != departureTrains[dIndex].TrainNo {
-				turnADToEdges(arrival, departureTrains[dIndex], 0, false)
-				turnADToEdges(arrival, departureTrains[dIndex], 1, false)
 				turnADToEdges(arrival, departureTrains[dIndex], 2, false)
 				isSuccess = true
 				dIndex = i
@@ -958,46 +945,46 @@ func buildArrivalToDepartureWaitingEdges(arrivalTrains, departureTrains []dao.Ra
 			dIndex = i
 		}
 		if !isSuccess && arrival.TrainNo != departureTrains[0].TrainNo {
-			turnADToEdges(arrival, departureTrains[0], 0, false)
-			turnADToEdges(arrival, departureTrains[0], 1, false)
 			turnADToEdges(arrival, departureTrains[0], 2, false)
 		}
 	}
 }
 
-func turnADToEdges(arrival, departure dao.RailWay, arrivalDay int64, isTemplate bool) {
-	newEdge := dao.RailWay{
-		TrainNumber:      Waiting,
-		TrainNo:          departure.TrainNo,
-		DepartureStation: arrival.ArrivalStation,
-		ArrivalStation:   departure.DepartureStation,
-		DepartureTime:    arrival.ArrivalTime,
-		ArrivalTime:      departure.DepartureTime,
-		ArrivalDay:       uint(arrivalDay),
-	}
-	if newEdge.ArrivalStation != newEdge.DepartureStation {
-		fmt.Println("[turnADToEdges] WRONG!!!")
-		fmt.Println(arrival, departure)
-		return
-	}
-	runningTime := CalculateStopTime(newEdge.DepartureTime, newEdge.ArrivalTime)
-	newEdge.RunningTime = TurnToTime(runningTime)
-	dTime, _ := GetTime(newEdge.DepartureTime)
-	aTime, _ := GetTime(newEdge.ArrivalTime)
-	if dTime > aTime {
-		newEdge.ArrivalDay = newEdge.ArrivalDay + 1
-		arrivalDay = arrivalDay + 1
-	}
-	arrivalIndex := "A/" + newEdge.DepartureStation + "/" + arrival.TrainNo + "/" + strconv.FormatInt(arrivalDay, 10)
-	if isTemplate {
-		NeedDeleteEdge[arrivalIndex] = arrivalIndex
-	}
-	value, ok := Graph[arrivalIndex]
-	if ok {
-		value = append(value, newEdge)
-		Graph[arrivalIndex] = value
-	} else {
-		Graph[arrivalIndex] = []dao.RailWay{newEdge}
+func turnADToEdges(arrival, departure dao.RailWay, maxArrivalDay int64, isTemplate bool) {
+	for arrivalDay := int64(0); arrivalDay <= maxArrivalDay; arrivalDay++ {
+		newEdge := dao.RailWay{
+			TrainNumber:      Waiting,
+			TrainNo:          departure.TrainNo,
+			DepartureStation: arrival.ArrivalStation,
+			ArrivalStation:   departure.DepartureStation,
+			DepartureTime:    arrival.ArrivalTime,
+			ArrivalTime:      departure.DepartureTime,
+			ArrivalDay:       uint(arrivalDay),
+		}
+		if newEdge.ArrivalStation != newEdge.DepartureStation {
+			fmt.Println("[turnADToEdges] WRONG!!!")
+			fmt.Println(arrival, departure)
+			return
+		}
+		runningTime := CalculateStopTime(newEdge.DepartureTime, newEdge.ArrivalTime)
+		newEdge.RunningTime = TurnToTime(runningTime)
+		dTime, _ := GetTime(newEdge.DepartureTime)
+		aTime, _ := GetTime(newEdge.ArrivalTime)
+		if dTime > aTime {
+			newEdge.ArrivalDay = newEdge.ArrivalDay + 1
+			arrivalDay = arrivalDay + 1
+		}
+		arrivalIndex := "A/" + newEdge.DepartureStation + "/" + arrival.TrainNo + "/" + strconv.FormatInt(arrivalDay, 10)
+		if isTemplate {
+			NeedDeleteEdge[arrivalIndex] = arrivalIndex
+		}
+		value, ok := Graph[arrivalIndex]
+		if ok {
+			value = append(value, newEdge)
+			Graph[arrivalIndex] = value
+		} else {
+			Graph[arrivalIndex] = []dao.RailWay{newEdge}
+		}
 	}
 }
 
@@ -1046,10 +1033,6 @@ func Dijkstra(startStation, endStation string, forbidTrain []string, maxTrans, s
 			(currTime == dist[currTransfers][currNode].AllRunningTime && currTransfers > dist[currTransfers][currNode].TransFerTimes) {
 			continue
 		}
-		if dist[currTransfers][currNode].NowTrainNumber != Waiting && dist[currTransfers][currNode].NowTrainNo == "560000Z17609" {
-			fmt.Println(dist[currTransfers][currNode])
-			fmt.Println(Graph[currNode])
-		}
 		indexString := strings.Split(currNode, "/")
 		if len(indexString) > 1 && indexString[1] == endStation {
 			return dist[currTransfers][currNode]
@@ -1083,10 +1066,14 @@ func Dijkstra(startStation, endStation string, forbidTrain []string, maxTrans, s
 			}
 
 			travelTime, _ = GetTime(edge.RunningTime)
-			if dist[currTransfers][currNode].NowStatus == "D" || edge.TrainNo == dist[currTransfers][currNode].NowTrainNo {
-				transfers = 0
-			} else {
+			if edge.TrainNo == "560000Z17609" {
+				fmt.Println(currNode, edge)
+			}
+			length := len(dist[currTransfers][currNode].TrainNo)
+			if dist[currTransfers][currNode].NowStatus == "D" && edge.TrainNumber != Waiting && (length == 0 || dist[currTransfers][currNode].TrainNo[length-1] != edge.TrainNo) {
 				transfers = 1
+			} else {
+				transfers = 0
 			}
 
 			newTime := currTime + travelTime
@@ -1116,7 +1103,7 @@ func Dijkstra(startStation, endStation string, forbidTrain []string, maxTrans, s
 					TransFerTimes:   newTransfers,
 					NowArrivalDay:   int64(edge.ArrivalDay),
 				}
-				if edge.TrainNumber != Waiting {
+				if transfers == 1 {
 					newAnalyseTrans.TrainNumber = append(newAnalyseTrans.TrainNumber, edge.TrainNumber)
 					newAnalyseTrans.TrainNo = append(newAnalyseTrans.TrainNo, edge.TrainNo)
 					newAnalyseTrans.StationSequence = append(newAnalyseTrans.StationSequence, edge.ArrivalStation)
