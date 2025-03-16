@@ -68,6 +68,7 @@ type AnalyseTrans struct {
 	TrainNo         []string
 	StationSequence []string
 	AllRunningTime  int64
+	ToTalPrice      int64
 	TransFerTimes   int64 //中转次数
 	NowArrivalDay   int64 //目前所在第几天
 }
@@ -76,7 +77,7 @@ type RailwayService interface {
 	SearchDirectly(departureStation, arrivalStation string, speedOption, sortOption int) ([]dao.RailWay, error)
 	SearchDirectlyOnline(departureStation, arrivalStation string) ([]dao.RailWay, error)
 	SearchWithOneTrans(departureStation, arrivalStation string, speedOption, sortOption int, limitStopTime, getAllResult int64) (map[string][]dao.RailWay, error)
-	SearchWithTwoTrans(departureStation, arrivalStation string, speedOption, sortOption int, limitStopTime, getAllResult int64) (map[string][]dao.RailWay, error)
+	SearchWithTwoTrans(departureStation, arrivalStation string, speedOption, maxTrans, recordNumber int64) (map[string][]dao.RailWay, error)
 }
 
 type RailWayServiceImpl struct {
@@ -158,12 +159,14 @@ func (r *RailWayServiceImpl) SearchWithOneTrans(departureStation, arrivalStation
 	return SortTransResult(result, sortOption, limitStopTime, getAllResult), nil
 }
 
-func (r *RailWayServiceImpl) SearchWithTwoTrans(departureStation, arrivalStation string, speedOption, sortOption int, limitStopTime, getAllResult int64) (map[string][]dao.RailWay, error) {
+func (r *RailWayServiceImpl) SearchWithTwoTrans(departureStation, arrivalStation string, speedOption, maxTrans, recordNumber int64) (map[string][]dao.RailWay, error) {
 	if !r.checkStation(departureStation) || !r.checkStation(arrivalStation) {
 		log.Printf("[SearchWithTwoTrans] stationNotFind")
 		return nil, errors.New("stationNotFind")
 	}
 	TemplateGraph = make(map[string][]dao.RailWay)
+	forbidTrain := make([]string, 0)
+	answer := make(map[string][]dao.RailWay)
 	err := r.AddNewStation(departureStation, true, 0)
 	if err != nil {
 		log.Printf("[SearchWithTwoTrans ] err:%s", err.Error())
@@ -174,11 +177,48 @@ func (r *RailWayServiceImpl) SearchWithTwoTrans(departureStation, arrivalStation
 		log.Printf("[SearchWithTwoTrans ] err:%s", err.Error())
 		return nil, err
 	}
-	result := Dijkstra(departureStation, arrivalStation, []string{}, 3, Default)
-	fmt.Println(result.AllRunningTime)
-	fmt.Println(result.TrainNumber)
-	fmt.Println(result)
-	return nil, nil
+	for i := int64(0); i < recordNumber; i++ {
+		result := Dijkstra(departureStation, arrivalStation, forbidTrain, maxTrans, speedOption)
+		title, railways := r.convertAnalyseToRailways(result)
+		answer[title] = railways
+		forbidTrain = append(forbidTrain, result.NowTrainNo)
+	}
+	//result := Dijkstra(departureStation, arrivalStation, []string{}, maxTrans, speedOption)
+	//fmt.Println(result.AllRunningTime)
+	//fmt.Println(result.TrainNumber)
+	//fmt.Println(result)
+	return answer, nil
+}
+
+func (r *RailWayServiceImpl) convertAnalyseToRailways(trans AnalyseTrans) (string, []dao.RailWay) {
+	title := ""
+	result := make([]dao.RailWay, 0)
+	for index, trainNumber := range trans.TrainNumber {
+		title = title + trainNumber + "/"
+		departureStation := trans.StationSequence[index]
+		arrivalStation := ""
+		if index != len(trans.StationSequence)-1 {
+			arrivalStation = trans.StationSequence[index+1]
+		} else {
+			arrivalStation = trans.NowStation
+		}
+		train, err := r.RailWayDAO.GetRailWayByDepartureStationAndArrivalStationAndTrainNo(departureStation, arrivalStation, trans.TrainNo[index])
+		if err != nil {
+			fmt.Println("[convertAnalyseToRailways] GetRailWayByDepartureStationAndArrivalStationAndTrainNo Error")
+			return "", []dao.RailWay{}
+		}
+		if train == nil {
+			fmt.Println("[convertAnalyseToRailways] train nil!")
+			return "", []dao.RailWay{}
+		}
+		if train.DepartureStation != departureStation {
+			fmt.Println("[convertAnalyseToRailways] train different departure station!")
+			fmt.Println(*train)
+		}
+		result = append(result, *train)
+	}
+	title = title + strconv.FormatInt(trans.AllRunningTime, 10)
+	return title, result
 }
 
 // 对转乘的进行排序，并且根据排序结果分别取动车前10，普车前10，动普混合前10

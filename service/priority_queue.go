@@ -5,6 +5,7 @@ type Item struct {
 	allTime       int64
 	transferTimes int64
 	index         int
+	price         int64
 }
 
 // PriorityQueue：最小堆的实现

@@ -360,6 +360,7 @@ func Dijkstra(startStation, endStation string, forbidTrain []string, maxTrans, s
 		for i := int64(0); i <= maxTrans; i++ {
 			dist[i][node] = AnalyseTrans{
 				AllRunningTime: math.MaxInt64,
+				ToTalPrice:     math.MaxInt64,
 				TransFerTimes:  math.MaxInt64,
 			}
 		}
@@ -367,6 +368,7 @@ func Dijkstra(startStation, endStation string, forbidTrain []string, maxTrans, s
 	dist[0][StartIndex] = AnalyseTrans{
 		AllRunningTime:  0,
 		TransFerTimes:   0,
+		ToTalPrice:      0,
 		NowStatus:       "D",
 		TrainNumber:     []string{},
 		TrainNo:         []string{},
@@ -381,7 +383,7 @@ func Dijkstra(startStation, endStation string, forbidTrain []string, maxTrans, s
 	// 运行 Dijkstra
 	for pq.Len() > 0 {
 		curr := heap.Pop(pq).(*Item)
-		currNode, currTime, currTransfers := curr.node, curr.allTime, curr.transferTimes
+		currNode, currTime, currTransfers, currPrice := curr.node, curr.allTime, curr.transferTimes, curr.price
 		// 如果当前路径已经不是最短路径，则跳过
 		if currTime > dist[currTransfers][currNode].AllRunningTime ||
 			(currTime == dist[currTransfers][currNode].AllRunningTime && currTransfers > dist[currTransfers][currNode].TransFerTimes) {
@@ -396,7 +398,7 @@ func Dijkstra(startStation, endStation string, forbidTrain []string, maxTrans, s
 		edges, ok := TemplateGraph[currNode]
 		if ok {
 			for _, edge := range edges {
-				item := getAnalyseTrans(edge, forbidTrain, currNode, currTransfers, currTime, maxTrans)
+				item := getAnalyseTrans(edge, forbidTrain, currNode, currTransfers, currTime, currPrice, maxTrans, speedOption)
 				if item != nil {
 					heap.Push(pq, item)
 				}
@@ -405,7 +407,7 @@ func Dijkstra(startStation, endStation string, forbidTrain []string, maxTrans, s
 		edges, ok = Graph[currNode]
 		if ok {
 			for _, edge := range edges {
-				item := getAnalyseTrans(edge, forbidTrain, currNode, currTransfers, currTime, maxTrans)
+				item := getAnalyseTrans(edge, forbidTrain, currNode, currTransfers, currTime, currPrice, maxTrans, speedOption)
 				if item != nil {
 					heap.Push(pq, item)
 				}
@@ -430,8 +432,16 @@ func isInForbid(trainNo string, forbidTrains []string) bool {
 	return false
 }
 
-func getAnalyseTrans(edge dao.RailWay, forbidTrain []string, currNode string, currTransfers, currTime, maxTrans int64) *Item {
+// 最短路的具体实现
+// 转乘的逻辑是如果当前边是出发边且不是站内Waiting边且和点本身的TrainNo不一致，那么将视为进行转乘，并且将列车信息写入Dist当中
+func getAnalyseTrans(edge dao.RailWay, forbidTrain []string, currNode string, currTransfers, currTime, currPrice, maxTrans, speedOption int64) *Item {
 	if isInForbid(edge.TrainNo, forbidTrain) {
+		return nil
+	}
+	if speedOption == OnlyHighSpeed && edge.IsHighSpeed == 0 {
+		return nil
+	}
+	if speedOption == OnlyLowSpeed && edge.IsHighSpeed == 1 {
 		return nil
 	}
 	//超过三天的行程不记录
@@ -475,6 +485,7 @@ func getAnalyseTrans(edge dao.RailWay, forbidTrain []string, currNode string, cu
 		dist[newTransfers][nextNode] = AnalyseTrans{
 			AllRunningTime: math.MaxInt64,
 			TransFerTimes:  math.MaxInt64,
+			ToTalPrice:     math.MaxInt64,
 		}
 	}
 	if newTime < dist[newTransfers][nextNode].AllRunningTime ||
@@ -489,6 +500,7 @@ func getAnalyseTrans(edge dao.RailWay, forbidTrain []string, currNode string, cu
 			StationSequence: dist[currTransfers][currNode].StationSequence,
 			AllRunningTime:  newTime,
 			TransFerTimes:   newTransfers,
+			ToTalPrice:      currPrice + edge.Price,
 			NowArrivalDay:   int64(edge.ArrivalDay),
 		}
 		if transfers == 1 {
