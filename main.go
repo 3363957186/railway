@@ -69,4 +69,5 @@ func main() {
 	//	fmt.Println(key, value)
 	//}
 	_, _ = RailwayService.SearchWithTwoTrans("杭州", "长白山", service.Default, service.Default, service.DefaultStopTime, service.Default)
+	_, _ = RailwayService.SearchWithTwoTrans("乌鲁木齐", "海口", service.Default, service.Default, service.DefaultStopTime, service.Default)
 }
