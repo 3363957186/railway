@@ -398,7 +398,7 @@ func Dijkstra(startStation, endStation string, forbidTrain []string, maxTrans, s
 		edges, ok := TemplateGraph[currNode]
 		if ok {
 			for _, edge := range edges {
-				item := getAnalyseTrans(edge, forbidTrain, currNode, currTransfers, currTime, currPrice, maxTrans, speedOption)
+				item := getAnalyseTransByTime(edge, forbidTrain, currNode, currTransfers, currTime, currPrice, maxTrans, speedOption)
 				if item != nil {
 					heap.Push(pq, item)
 				}
@@ -407,7 +407,7 @@ func Dijkstra(startStation, endStation string, forbidTrain []string, maxTrans, s
 		edges, ok = Graph[currNode]
 		if ok {
 			for _, edge := range edges {
-				item := getAnalyseTrans(edge, forbidTrain, currNode, currTransfers, currTime, currPrice, maxTrans, speedOption)
+				item := getAnalyseTransByTime(edge, forbidTrain, currNode, currTransfers, currTime, currPrice, maxTrans, speedOption)
 				if item != nil {
 					heap.Push(pq, item)
 				}
@@ -434,7 +434,7 @@ func isInForbid(trainNo string, forbidTrains []string) bool {
 
 // 最短路的具体实现
 // 转乘的逻辑是如果当前边是出发边且不是站内Waiting边且和点本身的TrainNo不一致，那么将视为进行转乘，并且将列车信息写入Dist当中
-func getAnalyseTrans(edge dao.RailWay, forbidTrain []string, currNode string, currTransfers, currTime, currPrice, maxTrans, speedOption int64) *Item {
+func getAnalyseTransByTime(edge dao.RailWay, forbidTrain []string, currNode string, currTransfers, currTime, currPrice, maxTrans, speedOption int64) *Item {
 	if isInForbid(edge.TrainNo, forbidTrain) {
 		return nil
 	}
@@ -501,6 +501,88 @@ func getAnalyseTrans(edge dao.RailWay, forbidTrain []string, currNode string, cu
 			AllRunningTime:  newTime,
 			TransFerTimes:   newTransfers,
 			ToTalPrice:      currPrice + edge.Price,
+			NowArrivalDay:   int64(edge.ArrivalDay),
+		}
+		if transfers == 1 {
+			newAnalyseTrans.TrainNumber = append(newAnalyseTrans.TrainNumber, edge.TrainNumber)
+			newAnalyseTrans.TrainNo = append(newAnalyseTrans.TrainNo, edge.TrainNo)
+			newAnalyseTrans.StationSequence = append(newAnalyseTrans.StationSequence, edge.DepartureStation)
+		}
+		dist[newTransfers][nextNode] = newAnalyseTrans
+
+		return &Item{node: nextNode, allTime: newTime, transferTimes: newTransfers}
+	}
+	return nil
+}
+
+func getAnalyseTransByPrice(edge dao.RailWay, forbidTrain []string, currNode string, currTransfers, currTime, currPrice, maxTrans, speedOption int64) *Item {
+	if isInForbid(edge.TrainNo, forbidTrain) {
+		return nil
+	}
+	if speedOption == OnlyHighSpeed && edge.IsHighSpeed == 0 {
+		return nil
+	}
+	if speedOption == OnlyLowSpeed && edge.IsHighSpeed == 1 {
+		return nil
+	}
+	//超过三天的行程不记录
+	if edge.ArrivalDay > 2 {
+		return nil
+	}
+	var (
+		nextNode   string
+		status     string
+		travelTime int64
+		transfers  int64
+	)
+
+	if edge.TrainNumber == Waiting {
+		nextNode = "D/" + edge.ArrivalStation + "/" + edge.TrainNo + "/" + strconv.Itoa(int(edge.ArrivalDay))
+		status = "D"
+	} else {
+		nextNode = "A/" + edge.ArrivalStation + "/" + edge.TrainNo + "/" + strconv.Itoa(int(edge.ArrivalDay))
+		status = "A"
+	}
+
+	travelTime, _ = GetTime(edge.RunningTime)
+	//if edge.TrainNo == "560000Z17609" {
+	//	fmt.Println(currNode, edge)
+	//}
+	length := len(dist[currTransfers][currNode].TrainNo)
+	if dist[currTransfers][currNode].NowStatus == "D" && edge.TrainNumber != Waiting && (length == 0 || dist[currTransfers][currNode].TrainNo[length-1] != edge.TrainNo) {
+		transfers = 1
+	} else {
+		transfers = 0
+	}
+
+	newTime := currTime + travelTime
+	newTransfers := currTransfers + transfers
+	newPrice := currPrice + edge.Price
+	if newTransfers > maxTrans {
+		return nil
+	}
+	// 如果找到更优路径，则更新
+	_, ok := dist[newTransfers][nextNode]
+	if !ok {
+		dist[newTransfers][nextNode] = AnalyseTrans{
+			AllRunningTime: math.MaxInt64,
+			TransFerTimes:  math.MaxInt64,
+			ToTalPrice:     math.MaxInt64,
+		}
+	}
+	if newPrice < dist[newTransfers][nextNode].ToTalPrice ||
+		(newPrice == dist[newTransfers][nextNode].ToTalPrice && newTransfers < dist[newTransfers][nextNode].TransFerTimes) {
+		newAnalyseTrans := AnalyseTrans{
+			NowTrainNumber:  edge.TrainNumber,
+			NowTrainNo:      edge.TrainNo,
+			NowStation:      edge.ArrivalStation,
+			NowStatus:       status,
+			TrainNumber:     dist[currTransfers][currNode].TrainNumber,
+			TrainNo:         dist[currTransfers][currNode].TrainNo,
+			StationSequence: dist[currTransfers][currNode].StationSequence,
+			AllRunningTime:  newTime,
+			TransFerTimes:   newTransfers,
+			ToTalPrice:      newPrice,
 			NowArrivalDay:   int64(edge.ArrivalDay),
 		}
 		if transfers == 1 {
