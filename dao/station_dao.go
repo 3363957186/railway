@@ -23,6 +23,7 @@ type StationDAO interface {
 	GetStationByID(id int) (*Station, error)
 	GetStationByName(name string) (*Station, error)
 	GetStationByCityName(cityName string) ([]Station, error)
+	GetStationByPrefixName(cityName string) ([]Station, error)
 	GetAllStations() ([]Station, error)
 	UpdateStation(station *Station) error
 	DeleteStation(id int) error
@@ -96,6 +97,15 @@ func (dao *StationDAOImpl) GetStationByName(name string) (*Station, error) {
 func (dao *StationDAOImpl) GetStationByCityName(cityName string) ([]Station, error) {
 	var stations []Station
 	result := dao.DB.Where("city_name = ?", cityName).Find(&stations)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return stations, nil
+}
+
+func (dao *StationDAOImpl) GetStationByPrefixName(cityName string) ([]Station, error) {
+	var stations []Station
+	result := dao.DB.Where("city_name Like ?%", cityName).Find(&stations)
 	if result.Error != nil {
 		return nil, result.Error
 	}
