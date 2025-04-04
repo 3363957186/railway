@@ -16,7 +16,7 @@ func StartNgork() {
 
 	// 启动 HTTPS 服务
 	// 注意：替换 cert.pem 和 key.pem 为你自己的证书文件路径
-	err := r.RunTLS(":443", "cert.pem", "huaweiyunwestlaketest.cn_server.key")
+	err := r.RunTLS(":443", "cert.pem", "server.key")
 	if err != nil {
 		return
 	}

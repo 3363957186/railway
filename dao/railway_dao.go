@@ -12,8 +12,8 @@ type RailWay struct {
 	ArrivalTime      string `gorm:"size:20" json:"arrival_time"`
 	RunningTime      string `gorm:"size:20" json:"running_time"`
 	Price            int64  `gorm:"size:1" json:"price"`
-	ArrivalDay       uint
-	IsHighSpeed      uint `gorm:"size:1" json:"is_high_speed"` //1为高速列车，0为普速列车
+	ArrivalDay       uint   `gorm:"size:1" json:"arrival_day"`
+	IsHighSpeed      uint   `gorm:"size:1" json:"is_high_speed"` //1为高速列车，0为普速列车
 }
 
 type RailWayDAO interface {
