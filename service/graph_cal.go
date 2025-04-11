@@ -398,7 +398,7 @@ func Dijkstra(startStation, endStation, speedOption string, forbidTrain []string
 		edges, ok := TemplateGraph[currNode]
 		if ok {
 			for _, edge := range edges {
-				item := getAnalyseTransByTime(edge, forbidTrain, currNode, speedOption, currTransfers, currTime, currPrice, maxTrans)
+				item := getAnalyseTransByTime(edge, forbidTrain, currNode, speedOption, currTransfers, currTime, maxTrans, currPrice)
 				if item != nil {
 					heap.Push(pq, item)
 				}
@@ -407,7 +407,7 @@ func Dijkstra(startStation, endStation, speedOption string, forbidTrain []string
 		edges, ok = Graph[currNode]
 		if ok {
 			for _, edge := range edges {
-				item := getAnalyseTransByTime(edge, forbidTrain, currNode, speedOption, currTransfers, currTime, currPrice, maxTrans)
+				item := getAnalyseTransByTime(edge, forbidTrain, currNode, speedOption, currTransfers, currTime, maxTrans, currPrice)
 				if item != nil {
 					heap.Push(pq, item)
 				}
@@ -434,7 +434,7 @@ func isInForbid(trainNo string, forbidTrains []string) bool {
 
 // 最短路的具体实现
 // 转乘的逻辑是如果当前边是出发边且不是站内Waiting边且和点本身的TrainNo不一致，那么将视为进行转乘，并且将列车信息写入Dist当中
-func getAnalyseTransByTime(edge dao.RailWay, forbidTrain []string, currNode, speedOption string, currTransfers, currTime, currPrice, maxTrans int64) *Item {
+func getAnalyseTransByTime(edge dao.RailWay, forbidTrain []string, currNode, speedOption string, currTransfers, currTime, maxTrans int64, currPrice float64) *Item {
 	if isInForbid(edge.TrainNo, forbidTrain) {
 		return nil
 	}
@@ -515,7 +515,7 @@ func getAnalyseTransByTime(edge dao.RailWay, forbidTrain []string, currNode, spe
 	return nil
 }
 
-func getAnalyseTransByPrice(edge dao.RailWay, forbidTrain []string, currNode, speedOption string, currTransfers, currTime, currPrice, maxTrans int64) *Item {
+func getAnalyseTransByPrice(edge dao.RailWay, forbidTrain []string, currNode, speedOption string, currTransfers, currTime, maxTrans int64, currPrice float64) *Item {
 	if isInForbid(edge.TrainNo, forbidTrain) {
 		return nil
 	}
@@ -567,7 +567,7 @@ func getAnalyseTransByPrice(edge dao.RailWay, forbidTrain []string, currNode, sp
 		dist[newTransfers][nextNode] = AnalyseTrans{
 			AllRunningTime: math.MaxInt64,
 			TransFerTimes:  math.MaxInt64,
-			ToTalPrice:     math.MaxInt64,
+			ToTalPrice:     math.MaxFloat64,
 		}
 	}
 	if newPrice < dist[newTransfers][nextNode].ToTalPrice ||

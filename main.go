@@ -78,6 +78,7 @@ func main() {
 	}
 	for key, value := range resultMap {
 		fmt.Println(key, value)
+
 	}
 	resultMap, err = service.R.SearchWithTwoTrans("乌鲁木齐", "海口", service.Default, 3, 5)
 	if err != nil {

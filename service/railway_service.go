@@ -69,7 +69,7 @@ type AnalyseTrans struct {
 	TrainNo         []string
 	StationSequence []string
 	AllRunningTime  int64
-	ToTalPrice      int64
+	ToTalPrice      float64
 	TransFerTimes   int64 //中转次数
 	NowArrivalDay   int64 //目前所在第几天
 }
