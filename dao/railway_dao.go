@@ -3,17 +3,17 @@ package dao
 import "gorm.io/gorm"
 
 type RailWay struct {
-	ID               uint   `gorm:"primaryKey" json:"id"`
-	TrainNumber      string `gorm:"size:20" json:"train_number"`
-	TrainNo          string `gorm:"size:20" json:"train_no"`
-	DepartureStation string `gorm:"size:20" json:"departure_station"`
-	DepartureTime    string `gorm:"size:20" json:"departure_time"`
-	ArrivalStation   string `gorm:"size:20" json:"arrival_station"`
-	ArrivalTime      string `gorm:"size:20" json:"arrival_time"`
-	RunningTime      string `gorm:"size:20" json:"running_time"`
-	Price            int64  `gorm:"size:1" json:"price"`
-	ArrivalDay       uint   `gorm:"size:1" json:"arrival_day"`
-	IsHighSpeed      uint   `gorm:"size:1" json:"is_high_speed"` //1为高速列车，0为普速列车
+	ID               uint    `gorm:"primaryKey" json:"id"`
+	TrainNumber      string  `gorm:"size:20" json:"train_number"`
+	TrainNo          string  `gorm:"size:20" json:"train_no"`
+	DepartureStation string  `gorm:"size:20" json:"departure_station"`
+	DepartureTime    string  `gorm:"size:20" json:"departure_time"`
+	ArrivalStation   string  `gorm:"size:20" json:"arrival_station"`
+	ArrivalTime      string  `gorm:"size:20" json:"arrival_time"`
+	RunningTime      string  `gorm:"size:20" json:"running_time"`
+	Price            float64 `gorm:"size:1" json:"price"`
+	ArrivalDay       uint    `gorm:"size:1" json:"arrival_day"`
+	IsHighSpeed      uint    `gorm:"size:1" json:"is_high_speed"` //1为高速列车，0为普速列车
 }
 
 type RailWayDAO interface {

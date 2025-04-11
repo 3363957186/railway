@@ -12,10 +12,11 @@ import (
 )
 
 const (
-	Default       = 0
-	OnlyHighSpeed = 1
-	OnlyLowSpeed  = 2
+	Default       = "all"
+	OnlyHighSpeed = "highspeed"
+	OnlyLowSpeed  = "normal"
 
+	DefaultSort          = 0
 	LowRunningTimeFirst  = 1
 	HighRunningTimeFirst = 2
 
@@ -74,10 +75,10 @@ type AnalyseTrans struct {
 }
 
 type RailwayService interface {
-	SearchDirectly(departureStation, arrivalStation string, speedOption, sortOption int) ([]dao.RailWay, error)
-	SearchDirectlyOnline(departureStation, arrivalStation string) ([]dao.RailWay, error)
-	SearchWithOneTrans(departureStation, arrivalStation string, speedOption, sortOption int, limitStopTime, getAllResult int64) (map[string][]dao.RailWay, error)
-	SearchWithTwoTrans(departureStation, arrivalStation string, speedOption, maxTrans, recordNumber int64) (map[string][]dao.RailWay, error)
+	SearchDirectly(departureStation, arrivalStation, speedOption string, sortOption int) (map[string][]dao.RailWay, error)
+	SearchDirectlyOnline(departureStation, arrivalStation string) (map[string][]dao.RailWay, error)
+	SearchWithOneTrans(departureStation, arrivalStation, speedOption string, sortOption int, limitStopTime, getAllResult int64) (map[string][]dao.RailWay, error)
+	SearchWithTwoTrans(departureStation, arrivalStation, speedOption string, maxTrans, recordNumber int64) (map[string][]dao.RailWay, error)
 }
 
 type RailWayServiceImpl struct {
@@ -87,6 +88,7 @@ type RailWayServiceImpl struct {
 
 var (
 	RailWayDAO dao.RailWayDAO
+	R          RailWayServiceImpl
 	_          RailwayService = (*RailWayServiceImpl)(nil)
 
 	//图，前面的string是图中的点，以D或者A开头（表示出发还是到达）加上站点名加上车次NO加上第几天的车；后面的[]是从这个点出发的边 在站内转乘时TrainNumber记为Waiting，TrainNo为arrival的TrainNo，这样能够找到下一班车所在点
@@ -104,11 +106,12 @@ func NewRailwayService(RailWayDAO dao.RailWayDAO, StationDAO dao.StationDAO) Rai
 	}
 }
 
-func (r *RailWayServiceImpl) SearchDirectly(departureStation, arrivalStation string, speedOption, sortOption int) (result []dao.RailWay, err error) {
+func (r *RailWayServiceImpl) SearchDirectly(departureStation, arrivalStation, speedOption string, sortOption int) (returnResult map[string][]dao.RailWay, err error) {
 	if !r.checkStation(departureStation) || !r.checkStation(arrivalStation) {
 		log.Printf("[SearchDirectly] stationNotFind")
 		return nil, errors.New("stationNotFind")
 	}
+	result := make([]dao.RailWay, 0)
 	switch speedOption {
 	case OnlyHighSpeed:
 		result, err = r.RailWayDAO.GetRailWayByDepartureStationAndArrivalStationOnlyHighSpeed(departureStation, arrivalStation)
@@ -134,13 +137,13 @@ func (r *RailWayServiceImpl) SearchDirectly(departureStation, arrivalStation str
 	default:
 		result = sortByEarlyFirst(result)
 	}
-	return result, nil
+	return turnSliceToMap(result), nil
 }
-func (r *RailWayServiceImpl) SearchDirectlyOnline(departureStation, arrivalStation string) ([]dao.RailWay, error) {
+func (r *RailWayServiceImpl) SearchDirectlyOnline(departureStation, arrivalStation string) (map[string][]dao.RailWay, error) {
 	return nil, errors.New("not implement")
 }
 
-func (r *RailWayServiceImpl) SearchWithOneTrans(departureStation, arrivalStation string, speedOption, sortOption int, limitStopTime, getAllResult int64) (map[string][]dao.RailWay, error) {
+func (r *RailWayServiceImpl) SearchWithOneTrans(departureStation, arrivalStation, speedOption string, sortOption int, limitStopTime, getAllResult int64) (map[string][]dao.RailWay, error) {
 	if !r.checkStation(departureStation) || !r.checkStation(arrivalStation) {
 		log.Printf("[SearchWithOneTrans] stationNotFind")
 		return nil, errors.New("stationNotFind")
@@ -159,7 +162,7 @@ func (r *RailWayServiceImpl) SearchWithOneTrans(departureStation, arrivalStation
 	return SortTransResult(result, sortOption, limitStopTime, getAllResult), nil
 }
 
-func (r *RailWayServiceImpl) SearchWithTwoTrans(departureStation, arrivalStation string, speedOption, maxTrans, recordNumber int64) (map[string][]dao.RailWay, error) {
+func (r *RailWayServiceImpl) SearchWithTwoTrans(departureStation, arrivalStation, speedOption string, maxTrans, recordNumber int64) (map[string][]dao.RailWay, error) {
 	if !r.checkStation(departureStation) || !r.checkStation(arrivalStation) {
 		log.Printf("[SearchWithTwoTrans] stationNotFind")
 		return nil, errors.New("stationNotFind")
@@ -178,7 +181,7 @@ func (r *RailWayServiceImpl) SearchWithTwoTrans(departureStation, arrivalStation
 		return nil, err
 	}
 	for i := int64(0); i < recordNumber; i++ {
-		result := Dijkstra(departureStation, arrivalStation, forbidTrain, maxTrans, speedOption)
+		result := Dijkstra(departureStation, arrivalStation, speedOption, forbidTrain, maxTrans)
 		title, railways := r.convertAnalyseToRailways(result)
 		answer[title] = railways
 		forbidTrain = append(forbidTrain, result.NowTrainNo)
@@ -405,6 +408,15 @@ func (r *RailWayServiceImpl) checkStation(stationName string) bool {
 	return true
 }
 
+func turnSliceToMap(Railways []dao.RailWay) map[string][]dao.RailWay {
+	results := make(map[string][]dao.RailWay)
+	for _, Railway := range Railways {
+		index := Railway.TrainNumber + Railway.RunningTime
+		results[index] = []dao.RailWay{Railway}
+	}
+	return results
+}
+
 func sortByLowRunningTime(result []dao.RailWay) []dao.RailWay {
 	sort.Slice(result, func(i, j int) bool {
 		iRunningTime, _ := GetTime(result[i].RunningTime)
@@ -475,7 +487,7 @@ func sortByEarlyArriveFirst(result []dao.RailWay) []dao.RailWay {
 	return result
 }
 
-func CombineTrainSchedule(departTrain, arrivalTrain []dao.RailWay, speedOption int) map[string][]dao.RailWay {
+func CombineTrainSchedule(departTrain, arrivalTrain []dao.RailWay, speedOption string) map[string][]dao.RailWay {
 	result := make(map[string][]dao.RailWay)
 	for _, dT := range departTrain {
 		if speedOption == OnlyHighSpeed && dT.IsHighSpeed == 0 {
