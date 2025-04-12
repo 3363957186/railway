@@ -111,28 +111,42 @@ func (h *HandlerImpl) searchHandler(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
 	}
 	results := make(map[string][]dao.RailWay)
-	if len(req.MidStations) > 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "not implement"})
-	}
-	templateResult, err := h.RailWayServiceImpl.SearchDirectly(req.From, req.To, req.TrainType, int(req.SortBy))
+	departStations, err := h.getStations(req.From)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getStations fetching results"})
 	}
-	results = combineMap(results, templateResult)
-
-	if req.MaxTransfer >= 1 {
-		templateResult, err = h.RailWayServiceImpl.SearchWithOneTrans(req.From, req.To, req.TrainType, int(req.SortBy), service.DefaultStopTime, 0)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		}
-		results = combineMap(results, templateResult)
+	arrivalStations, err := h.getStations(req.To)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getStations fetching results"})
 	}
-	if req.MaxTransfer >= 2 {
-		templateResult, err = h.RailWayServiceImpl.SearchWithTwoTrans(req.From, req.To, req.TrainType, req.MaxTransfer, 10)
+	if len(req.MidStations) > 0 {
+		midStations, err := h.getStations(req.MidStations[0])
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getStations fetching results"})
 		}
-		results = combineMap(results, templateResult)
+		if len(midStations) > 0 {
+			for _, midStation := range midStations {
+				for _, departStation := range departStations {
+					for _, arrivalStation := range arrivalStations {
+						templateResults, err := h.searchWithStations(departStation, midStation, arrivalStation, req.TrainType, int(req.SortBy), req.MaxTransfer)
+						if err != nil {
+							c.JSON(http.StatusInternalServerError, gin.H{"error": "Error searchWithStations fetching results"})
+						}
+						results = combineMap(results, templateResults)
+					}
+				}
+			}
+		}
+	} else {
+		for _, departStation := range departStations {
+			for _, arrivalStation := range arrivalStations {
+				templateResults, err := h.searchWithStations(departStation, "", arrivalStation, req.TrainType, int(req.SortBy), req.MaxTransfer)
+				if err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "Error searchWithStations fetching results"})
+				}
+				results = combineMap(results, templateResults)
+			}
+		}
 	}
 	returnResult := turnMapToResponseSlice(results)
 	switch req.SortBy {
@@ -150,6 +164,56 @@ func (h *HandlerImpl) searchHandler(c *gin.Context) {
 		returnResult = sortTemplateStructByLowRunningTime(returnResult)
 	}
 	c.JSON(http.StatusOK, returnResult)
+}
+
+func (h *HandlerImpl) searchWithStations(departureStation, midStation, arrivalStation, speedOption string, sortOption int, maxTrans int64) (map[string][]dao.RailWay, error) {
+	results := make(map[string][]dao.RailWay)
+	if len(midStation) > 0 {
+		templateResult, err := h.RailWayServiceImpl.SearchWithOneSpecificTrans(departureStation, midStation, arrivalStation, speedOption, sortOption, service.DefaultStopTime)
+		if err != nil {
+			return nil, err
+		}
+		results = templateResult
+	} else {
+		templateResult, err := h.RailWayServiceImpl.SearchDirectly(departureStation, arrivalStation, speedOption, sortOption)
+		if err != nil {
+			return nil, err
+		}
+		results = combineMap(results, templateResult)
+
+		if maxTrans >= 1 {
+			templateResult, err = h.RailWayServiceImpl.SearchWithOneTrans(departureStation, arrivalStation, speedOption, sortOption, service.DefaultStopTime, 0)
+			if err != nil {
+				return nil, err
+			}
+			results = combineMap(results, templateResult)
+		}
+		if maxTrans >= 2 {
+			templateResult, err = h.RailWayServiceImpl.SearchWithTwoTrans(departureStation, arrivalStation, speedOption, maxTrans, service.DefaultResultNumber)
+			if err != nil {
+				return nil, err
+			}
+			results = combineMap(results, templateResult)
+		}
+	}
+	return results, nil
+}
+
+func (h *HandlerImpl) getStations(inputStation string) ([]string, error) {
+	if strings.Contains(inputStation, "（市）") {
+		inputCity := strings.TrimSuffix(inputStation, "（市）")
+		startStations, err := h.RailWayServiceImpl.StationDAO.GetStationByPrefixName(inputCity)
+		if err != nil {
+			return nil, err
+		}
+		results := make([]string, 0)
+		for _, station := range startStations {
+			results = append(results, station.StationName)
+		}
+		return results, nil
+	} else {
+		return []string{inputStation}, nil
+	}
 }
 
 func combineMap(mapA, mapB map[string][]dao.RailWay) map[string][]dao.RailWay {

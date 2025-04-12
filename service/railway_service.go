@@ -29,6 +29,8 @@ const (
 	GetAllResult    = 1
 	DefaultStopTime = 15
 
+	DefaultResultNumber = 10
+
 	StartIndex = "Start"
 	EndIndex   = "End"
 	Waiting    = "Waiting"
@@ -78,6 +80,7 @@ type RailwayService interface {
 	SearchDirectly(departureStation, arrivalStation, speedOption string, sortOption int) (map[string][]dao.RailWay, error)
 	SearchDirectlyOnline(departureStation, arrivalStation string) (map[string][]dao.RailWay, error)
 	SearchWithOneTrans(departureStation, arrivalStation, speedOption string, sortOption int, limitStopTime, getAllResult int64) (map[string][]dao.RailWay, error)
+	SearchWithOneSpecificTrans(departureStation, midStation, arrivalStation, speedOption string, sortOption int, limitStopTime int64) (map[string][]dao.RailWay, error)
 	SearchWithTwoTrans(departureStation, arrivalStation, speedOption string, maxTrans, recordNumber int64) (map[string][]dao.RailWay, error)
 }
 
@@ -141,6 +144,25 @@ func (r *RailWayServiceImpl) SearchDirectly(departureStation, arrivalStation, sp
 }
 func (r *RailWayServiceImpl) SearchDirectlyOnline(departureStation, arrivalStation string) (map[string][]dao.RailWay, error) {
 	return nil, errors.New("not implement")
+}
+
+func (r *RailWayServiceImpl) SearchWithOneSpecificTrans(departureStation, midStation, arrivalStation, speedOption string, sortOption int, limitStopTime int64) (map[string][]dao.RailWay, error) {
+	if !r.checkStation(departureStation) || !r.checkStation(arrivalStation) || !r.checkStation(midStation) {
+		log.Printf("[SearchWithOneSpecificTrans] stationNotFind")
+		return nil, errors.New("stationNotFind")
+	}
+	departTrain, err := r.RailWayDAO.GetRailWayByDepartureStationAndArrivalStation(departureStation, midStation)
+	if err != nil {
+		log.Printf("[SearchWithOneSpecificTrans] err:%s", err.Error())
+		return nil, err
+	}
+	arrivalTrain, err := r.RailWayDAO.GetRailWayByDepartureStationAndArrivalStation(midStation, arrivalStation)
+	if err != nil {
+		log.Printf("[SearchWithOneSpecificTrans] err:%s", err.Error())
+		return nil, err
+	}
+	result := CombineTrainSchedule(departTrain, arrivalTrain, speedOption)
+	return SortTransResult(result, sortOption, limitStopTime, 0), nil
 }
 
 func (r *RailWayServiceImpl) SearchWithOneTrans(departureStation, arrivalStation, speedOption string, sortOption int, limitStopTime, getAllResult int64) (map[string][]dao.RailWay, error) {
