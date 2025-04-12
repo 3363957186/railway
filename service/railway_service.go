@@ -433,7 +433,7 @@ func (r *RailWayServiceImpl) checkStation(stationName string) bool {
 func turnSliceToMap(Railways []dao.RailWay) map[string][]dao.RailWay {
 	results := make(map[string][]dao.RailWay)
 	for _, Railway := range Railways {
-		index := Railway.TrainNumber + Railway.RunningTime
+		index := Railway.TrainNumber + "/" + Railway.RunningTime
 		results[index] = []dao.RailWay{Railway}
 	}
 	return results
