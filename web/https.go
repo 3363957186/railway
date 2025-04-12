@@ -124,6 +124,7 @@ func (h *HandlerImpl) searchHandler(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
 		fmt.Println(c)
 	}
+	req.SortBy = req.SortBy + 1
 	results := make(map[string][]dao.RailWay)
 	departStations, err := h.getStations(req.From)
 	if err != nil {
