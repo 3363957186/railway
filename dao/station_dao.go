@@ -105,7 +105,7 @@ func (dao *StationDAOImpl) GetStationByCityName(cityName string) ([]Station, err
 
 func (dao *StationDAOImpl) GetStationByPrefixName(cityName string) ([]Station, error) {
 	var stations []Station
-	result := dao.DB.Where("city_name Like ?%", cityName).Find(&stations)
+	result := dao.DB.Where("city_name Like ?", cityName+"%").Find(&stations)
 	if result.Error != nil {
 		return nil, result.Error
 	}

@@ -30,6 +30,7 @@ func init() {
 // 车站模型
 
 func main() {
+
 	err := service.R.InitBuildGraph()
 	if err != nil {
 		fmt.Println(err)
@@ -87,4 +88,5 @@ func main() {
 	for key, value := range resultMap {
 		fmt.Println(key, value)
 	}
+	web.StartNgork()
 }
