@@ -164,6 +164,9 @@ func (h *HandlerImpl) searchHandler(c *gin.Context) {
 		}
 	}
 	returnResult := turnMapToResponseSlice(results)
+	//调试输出
+	fmt.Println(req.SortBy)
+	fmt.Println(returnResult)
 	switch req.SortBy {
 	case service.LowRunningTimeFirst:
 		returnResult = sortTemplateStructByLowRunningTime(returnResult)

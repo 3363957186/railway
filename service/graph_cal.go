@@ -82,8 +82,15 @@ func AddStationTrans(arriveTrain dao.RailWay, departureKeyTrains []dao.RailWay, 
 			return
 		}
 	}
-	turnADToEdges(arriveTrain, departureKeyTrains[0], 2, true)
-	//fmt.Println(arriveTrain, departureKeyTrains[0])
+	//如果当天没有可以换乘的车则搜寻第二天的
+	for _, train := range departureKeyTrains {
+		aTime, _ := GetTime(arriveTrain.ArrivalTime)
+		dTime, _ := GetTime(train.DepartureTime)
+		if aTime+limitStopTime < dTime+1440 && train.TrainNo != arriveTrain.TrainNo {
+			turnADToEdges(arriveTrain, train, 2, true)
+			return
+		}
+	}
 }
 
 func (r *RailWayServiceImpl) DeleteNewStation(stationName string, isDeparture bool) {
@@ -291,8 +298,15 @@ func buildArrivalToDepartureWaitingEdges(arrivalTrains, departureTrains []dao.Ra
 			}
 			dIndex = i
 		}
-		if !isSuccess && arrival.TrainNo != departureTrains[0].TrainNo {
-			turnADToEdges(arrival, departureTrains[0], 2, false)
+		if !isSuccess {
+			for _, train := range departureTrains {
+				aTime, _ := GetTime(arrival.ArrivalTime)
+				dTime, _ := GetTime(train.DepartureTime)
+				if aTime+limitStopTime <= dTime+1440 && arrival.TrainNo != train.TrainNo {
+					turnADToEdges(arrival, train, 2, false)
+					isSuccess = true
+				}
+			}
 		}
 	}
 }
