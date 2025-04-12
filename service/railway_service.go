@@ -204,6 +204,9 @@ func (r *RailWayServiceImpl) SearchWithTwoTrans(departureStation, arrivalStation
 	}
 	for i := int64(0); i < recordNumber; i++ {
 		result := Dijkstra(departureStation, arrivalStation, speedOption, forbidTrain, maxTrans)
+		if result.AllRunningTime > 1440*30 {
+			break
+		}
 		title, railways := r.convertAnalyseToRailways(result)
 		answer[title] = railways
 		forbidTrain = append(forbidTrain, result.NowTrainNo)

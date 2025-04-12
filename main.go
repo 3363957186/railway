@@ -88,7 +88,7 @@ func main() {
 		fmt.Println(key, value)
 
 	}
-	resultMap, err = service.R.SearchWithTwoTrans("北京南", "杭州东", service.Default, 2, service.DefaultResultNumber)
+	resultMap, err = service.R.SearchWithTwoTrans("乌鲁木齐", "海口", service.Default, 3, service.DefaultResultNumber)
 	if err != nil {
 		fmt.Println(err)
 	}
