@@ -17,14 +17,14 @@ const (
 	OnlyLowSpeed  = "normal"
 
 	DefaultSort          = 0
-	LowRunningTimeFirst  = 1
-	HighRunningTimeFirst = 2
+	LowRunningTimeFirst  = 3
+	HighRunningTimeFirst = 4
 
-	EarlyFirst = 3
-	LateFirst  = 4
+	EarlyFirst = 5
+	LateFirst  = 6
 
-	LowPriceFirst  = 5
-	HighPriceFirst = 6
+	LowPriceFirst  = 1
+	HighPriceFirst = 2
 
 	GetAllResult    = 1
 	DefaultStopTime = 15
