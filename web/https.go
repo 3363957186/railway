@@ -57,7 +57,8 @@ func StartNgork() {
 		// 返回一个字符串表示成功连接
 		c.String(http.StatusOK, "连接成功")
 	})
-	r.POST("/search", H.stationHandler)
+	r.POST("/station", H.stationHandler)
+	r.POST("/search", H.searchHandler)
 	// 启动 HTTPS 服务
 	err := r.RunTLS(":443", "cert.pem", "server.key")
 	if err != nil {
