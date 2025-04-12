@@ -206,7 +206,7 @@ func (h *HandlerImpl) searchWithStations(departureStation, midStation, arrivalSt
 			}
 			results = combineMap(results, templateResult)
 		}
-		if maxTrans >= 2 {
+		if maxTrans >= 2 && (sortOption == service.LowRunningTimeFirst || sortOption == service.LowPriceFirst) {
 			templateResult, err = h.RailWayServiceImpl.SearchWithTwoTrans(departureStation, arrivalStation, speedOption, maxTrans, service.DefaultResultNumber)
 			if err != nil {
 				return nil, err
