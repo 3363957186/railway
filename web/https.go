@@ -81,6 +81,12 @@ func (h *HandlerImpl) stationHandler(c *gin.Context) {
 	}
 
 	// 调用服务层（例如 RailWayDAO）来获取查询结果
+	resultCities, err := h.RailWayServiceImpl.StationDAO.GetCityByPrefixName(req.Keyword)
+	if err != nil {
+		// 如果查询出错，返回 500 错误
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error fetching results"})
+		return
+	}
 	resultStations, err := h.RailWayServiceImpl.StationDAO.GetStationByPrefixName(req.Keyword)
 	if err != nil {
 		// 如果查询出错，返回 500 错误
@@ -93,6 +99,8 @@ func (h *HandlerImpl) stationHandler(c *gin.Context) {
 	city := make(map[string]string)
 	for _, result := range resultStations {
 		resultStation = append(resultStation, result.StationName)
+	}
+	for _, result := range resultCities {
 		_, ok := city[result.CityName]
 		if !ok {
 			city[result.CityName] = result.CityName
