@@ -1,6 +1,7 @@
 package web
 
 import (
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"net/http"
 	"railway/dao"
@@ -36,7 +37,7 @@ type RequestSearch struct {
 	From        string   `json:"from"`
 	To          string   `json:"to"`
 	SortBy      int64    `json:"sort_by"`
-	MaxTransfer int64    `json:"max_transfer"`
+	MaxTransfer string   `json:"max_transfer"`
 	MidStations []string `json:"midStations"`
 	TrainType   string   `json:"train_type"`
 }
@@ -77,7 +78,7 @@ func (h *HandlerImpl) stationHandler(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		// 如果解析失败，返回 400 错误
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
-		return
+		fmt.Println(err)
 	}
 
 	// 调用服务层（例如 RailWayDAO）来获取查询结果
@@ -85,13 +86,11 @@ func (h *HandlerImpl) stationHandler(c *gin.Context) {
 	if err != nil {
 		// 如果查询出错，返回 500 错误
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error fetching results"})
-		return
 	}
 	resultStations, err := h.RailWayServiceImpl.StationDAO.GetStationByPrefixName(req.Keyword)
 	if err != nil {
 		// 如果查询出错，返回 500 错误
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error fetching results"})
-		return
 	}
 	results := make([]string, 0)
 	resultStation := make([]string, 0)
@@ -118,6 +117,12 @@ func (h *HandlerImpl) searchHandler(c *gin.Context) {
 	var req RequestSearch
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
+		fmt.Println(c)
+	}
+	maxTransfer, err := strconv.ParseInt(req.MaxTransfer, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
+		fmt.Println(c)
 	}
 	results := make(map[string][]dao.RailWay)
 	departStations, err := h.getStations(req.From)
@@ -137,7 +142,7 @@ func (h *HandlerImpl) searchHandler(c *gin.Context) {
 			for _, midStation := range midStations {
 				for _, departStation := range departStations {
 					for _, arrivalStation := range arrivalStations {
-						templateResults, err := h.searchWithStations(departStation, midStation, arrivalStation, req.TrainType, int(req.SortBy), req.MaxTransfer)
+						templateResults, err := h.searchWithStations(departStation, midStation, arrivalStation, req.TrainType, int(req.SortBy), maxTransfer)
 						if err != nil {
 							c.JSON(http.StatusInternalServerError, gin.H{"error": "Error searchWithStations fetching results"})
 						}
@@ -149,7 +154,7 @@ func (h *HandlerImpl) searchHandler(c *gin.Context) {
 	} else {
 		for _, departStation := range departStations {
 			for _, arrivalStation := range arrivalStations {
-				templateResults, err := h.searchWithStations(departStation, "", arrivalStation, req.TrainType, int(req.SortBy), req.MaxTransfer)
+				templateResults, err := h.searchWithStations(departStation, "", arrivalStation, req.TrainType, int(req.SortBy), maxTransfer)
 				if err != nil {
 					c.JSON(http.StatusInternalServerError, gin.H{"error": "Error searchWithStations fetching results"})
 				}
