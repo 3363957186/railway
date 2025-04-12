@@ -208,10 +208,6 @@ func (r *RailWayServiceImpl) SearchWithTwoTrans(departureStation, arrivalStation
 		answer[title] = railways
 		forbidTrain = append(forbidTrain, result.NowTrainNo)
 	}
-	//result := Dijkstra(departureStation, arrivalStation, []string{}, maxTrans, speedOption)
-	//fmt.Println(result.AllRunningTime)
-	//fmt.Println(result.TrainNumber)
-	//fmt.Println(result)
 	return answer, nil
 }
 

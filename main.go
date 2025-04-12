@@ -30,6 +30,13 @@ func init() {
 // 车站模型
 
 func main() {
+	//resultMap, err := service.R.SearchWithOneTrans("北京南", "杭州东", service.Default, service.LowRunningTimeFirst, service.DefaultStopTime, 0)
+	//if err != nil {
+	//	fmt.Println(err)
+	//}
+	//for key, value := range resultMap {
+	//	fmt.Println(key, value)
+	//}
 
 	err := service.R.InitBuildGraph()
 	if err != nil {
@@ -81,7 +88,7 @@ func main() {
 		fmt.Println(key, value)
 
 	}
-	resultMap, err = service.R.SearchWithTwoTrans("乌鲁木齐", "海口", service.Default, 3, 5)
+	resultMap, err = service.R.SearchWithTwoTrans("北京南", "杭州东", service.Default, 2, service.DefaultResultNumber)
 	if err != nil {
 		fmt.Println(err)
 	}

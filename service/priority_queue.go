@@ -6,6 +6,7 @@ type Item struct {
 	transferTimes int64
 	index         int
 	price         float64
+	specialTag    bool //如果上一条边由A到D且中转时间小于15分钟，则这个Tag为true
 }
 
 // PriorityQueue：最小堆的实现
