@@ -125,6 +125,9 @@ func (h *HandlerImpl) searchHandler(c *gin.Context) {
 		fmt.Println(c)
 	}
 	req.SortBy = req.SortBy + 1
+	if req.SortBy > 6 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request payload"})
+	}
 	results := make(map[string][]dao.RailWay)
 	departStations, err := h.getStations(req.From)
 	if err != nil {
@@ -174,7 +177,9 @@ func (h *HandlerImpl) searchHandler(c *gin.Context) {
 	case service.LateFirst:
 		returnResult = sortTemplateStructByLateFirst(returnResult)
 	case service.LowPriceFirst:
+		returnResult = sortTemplateStructByLowPrice(returnResult)
 	case service.HighPriceFirst:
+		returnResult = sortTemplateStructByHighPrice(returnResult)
 	default:
 		returnResult = sortTemplateStructByLowRunningTime(returnResult)
 	}
@@ -297,6 +302,34 @@ func sortTemplateStructByEarlyFirst(result []ResponseSearch) []ResponseSearch {
 
 func sortTemplateStructByLateFirst(result []ResponseSearch) []ResponseSearch {
 	sort.Slice(result, func(i, j int) bool {
+		iDepartTime, _ := service.GetTime(result[i].Railway[0].DepartureTime)
+		jDepartTime, _ := service.GetTime(result[j].Railway[0].DepartureTime)
+		if iDepartTime == jDepartTime {
+			return result[i].TotalTime < result[j].TotalTime
+		}
+		return iDepartTime > jDepartTime
+	})
+	return result
+}
+func sortTemplateStructByLowPrice(result []ResponseSearch) []ResponseSearch {
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].TotalPrice != result[j].TotalPrice {
+			return result[i].TotalPrice < result[j].TotalPrice
+		}
+		iDepartTime, _ := service.GetTime(result[i].Railway[0].DepartureTime)
+		jDepartTime, _ := service.GetTime(result[j].Railway[0].DepartureTime)
+		if iDepartTime == jDepartTime {
+			return result[i].TotalTime < result[j].TotalTime
+		}
+		return iDepartTime > jDepartTime
+	})
+	return result
+}
+func sortTemplateStructByHighPrice(result []ResponseSearch) []ResponseSearch {
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].TotalPrice != result[j].TotalPrice {
+			return result[i].TotalPrice > result[j].TotalPrice
+		}
 		iDepartTime, _ := service.GetTime(result[i].Railway[0].DepartureTime)
 		jDepartTime, _ := service.GetTime(result[j].Railway[0].DepartureTime)
 		if iDepartTime == jDepartTime {

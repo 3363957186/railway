@@ -58,7 +58,6 @@ func (r *RailWayServiceImpl) AddNewStation(stationName string, isDeparture bool,
 	return nil
 }
 
-// TODO 这里需要对新添加站点的点和边进行计算，这是一件非常复杂的事情，需要解决到达关键站点的加边问题和运算结束之后的删边问题。暂时没有发现性能比较好的算法，后面可能考虑直接拿完全图来进行计算
 func AddStationTrans(arriveTrain dao.RailWay, departureKeyTrains []dao.RailWay, limitStopTime int64) {
 	if len(departureKeyTrains) == 0 {
 		return
@@ -351,7 +350,7 @@ func turnADToEdges(arrival, departure dao.RailWay, maxArrivalDay, limitStopTime 
 	}
 }
 
-func Dijkstra(startStation, endStation, speedOption string, forbidTrain []string, maxTrans int64) AnalyseTrans {
+func Dijkstra(startStation, endStation, speedOption string, forbidTrain []string, sortOptions, maxTrans int64) AnalyseTrans {
 	//for key, value := range Graph {
 	//	stringIndex := strings.Split(key, "/")
 	//	if len(stringIndex) > 2 && stringIndex[1] == "乌鲁木齐" {
@@ -411,10 +410,18 @@ func Dijkstra(startStation, endStation, speedOption string, forbidTrain []string
 				if curr.specialTag == true && edge.DepartureStation == edge.ArrivalStation {
 					continue
 				}
-				item := getAnalyseTransByTime(edge, forbidTrain, currNode, speedOption, currTransfers, currTime, maxTrans, currPrice)
-				if item != nil {
-					heap.Push(pq, item)
+				if sortOptions == LowPriceFirst {
+					item := getAnalyseTransByPrice(edge, forbidTrain, currNode, speedOption, currTransfers, currTime, maxTrans, currPrice)
+					if item != nil {
+						heap.Push(pq, item)
+					}
+				} else {
+					item := getAnalyseTransByTime(edge, forbidTrain, currNode, speedOption, currTransfers, currTime, maxTrans, currPrice)
+					if item != nil {
+						heap.Push(pq, item)
+					}
 				}
+
 			}
 		}
 		edges, ok = Graph[currNode]
@@ -423,9 +430,16 @@ func Dijkstra(startStation, endStation, speedOption string, forbidTrain []string
 				if curr.specialTag == true && edge.DepartureStation == edge.ArrivalStation {
 					continue
 				}
-				item := getAnalyseTransByTime(edge, forbidTrain, currNode, speedOption, currTransfers, currTime, maxTrans, currPrice)
-				if item != nil {
-					heap.Push(pq, item)
+				if sortOptions == LowPriceFirst {
+					item := getAnalyseTransByPrice(edge, forbidTrain, currNode, speedOption, currTransfers, currTime, maxTrans, currPrice)
+					if item != nil {
+						heap.Push(pq, item)
+					}
+				} else {
+					item := getAnalyseTransByTime(edge, forbidTrain, currNode, speedOption, currTransfers, currTime, maxTrans, currPrice)
+					if item != nil {
+						heap.Push(pq, item)
+					}
 				}
 			}
 		}

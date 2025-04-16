@@ -12,6 +12,14 @@ type RailWay struct {
 	ArrivalTime      string  `gorm:"size:20" json:"arrival_time"`
 	RunningTime      string  `gorm:"size:20" json:"running_time"`
 	Price            float64 `gorm:"size:1" json:"price"`
+	YWPrice          float64 `gorm:"size:1" json:"yw_price"`  //硬卧
+	YZPrice          float64 `gorm:"size:1" json:"yz_price"`  //硬座
+	RWPrice          float64 `gorm:"size:1" json:"rw_price"`  //软卧
+	ZEPrice          float64 `gorm:"size:1" json:"ze_price"`  //二等座
+	ZYPrice          float64 `gorm:"size:1" json:"zy_price"`  //一等座
+	SWZPrice         float64 `gorm:"size:1" json:"swz_price"` //商务座
+	TZPrice          float64 `gorm:"size:1" json:"tz_price"`  //特等座
+	GRPrice          float64 `gorm:"size:1" json:"gr_price"`  //高软
 	ArrivalDay       uint    `gorm:"size:1" json:"arrival_day"`
 	IsHighSpeed      uint    `gorm:"size:1" json:"is_high_speed"` //1为高速列车，0为普速列车
 }

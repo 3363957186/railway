@@ -137,6 +137,8 @@ func (r *RailWayServiceImpl) SearchDirectly(departureStation, arrivalStation, sp
 		result = sortByEarlyFirst(result)
 	case LateFirst:
 		result = sortByLateFirst(result)
+	case LowPriceFirst:
+		result = sortByLowPriceFirst(result)
 	default:
 		result = sortByEarlyFirst(result)
 	}
@@ -494,7 +496,17 @@ func sortByLateFirst(result []dao.RailWay) []dao.RailWay {
 	})
 	return result
 }
-
+func sortByLowPriceFirst(result []dao.RailWay) []dao.RailWay {
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].Price != result[j].Price {
+			return result[i].Price < result[j].Price
+		}
+		iDepartTime, _ := GetTime(result[i].DepartureTime)
+		jDepartTime, _ := GetTime(result[j].DepartureTime)
+		return iDepartTime < jDepartTime
+	})
+	return result
+}
 func sortByEarlyArriveFirst(result []dao.RailWay) []dao.RailWay {
 	sort.Slice(result, func(i, j int) bool {
 		iArrivalTime, _ := GetTime(result[i].ArrivalTime)
@@ -559,7 +571,7 @@ func resultDedUp(result []dao.RailWay) []dao.RailWay {
 }
 
 func DownLoadRailWay() error {
-	file, err := excelize.OpenFile("train_schedule.xlsx")
+	file, err := excelize.OpenFile("train_ticket_prices_2.xlsx")
 	if err != nil {
 		log.Fatalf("无法打开文件: %v", err)
 		return err
@@ -579,8 +591,6 @@ func DownLoadRailWay() error {
 		return err
 	}
 
-	original := make([]OriginalRailWay, 0)
-	mapOriginal := make(map[string]OriginalRailWay)
 	railWays := make([]dao.RailWay, 0)
 	sum := 0
 	for i, row := range rows {
@@ -595,88 +605,35 @@ func DownLoadRailWay() error {
 		}
 
 		// 将每行数据转换为 Station 结构体
-		originalRailway := OriginalRailWay{
-			TrainNumber:     row[0],
-			TrainNo:         row[1],
-			StationSequence: row[2],
-			ArrivalStation:  row[3],
-			ArrivalTime:     row[4],
-			DepartureTime:   row[5],
-			RunningTime:     row[6],
-			ArrivalDay:      row[7],
+		originalRailway := dao.RailWay{
+			TrainNumber:      row[0],
+			TrainNo:          row[1],
+			DepartureStation: row[2],
+			ArrivalStation:   row[3],
+			DepartureTime:    row[4],
+			ArrivalTime:      row[5],
+			RunningTime:      row[6],
+			YWPrice:          GetPrice(row[7]),
+			YZPrice:          GetPrice(row[8]),
+			RWPrice:          GetPrice(row[9]),
+			ZEPrice:          GetPrice(row[10]),
+			ZYPrice:          GetPrice(row[11]),
+			SWZPrice:         GetPrice(row[12]),
+			TZPrice:          GetPrice(row[13]),
+			GRPrice:          GetPrice(row[14]),
 		}
-		if len(original) == 0 || originalRailway.TrainNo != original[0].TrainNo {
-			originalRailway.StopTime = 0
-			original = make([]OriginalRailWay, 0) //清空
-			mapOriginal = make(map[string]OriginalRailWay)
-			original = append(original, originalRailway)
-			mapOriginal[original[0].ArrivalStation] = originalRailway
-		} else {
-			_, ok := mapOriginal[originalRailway.ArrivalStation]
-			if ok {
-				continue
+		originalRailway.Price = GetLowPrice(originalRailway)
+		railWays = append(railWays, originalRailway)
+		if len(railWays) > 50 {
+			err = RailWayDAO.BatchCreateRailWays(railWays)
+			if err != nil {
+				return err
 			}
-			if originalRailway.StationSequence == "01" {
-				originalRailway.StopTime = 0
-			} else {
-				originalRailway.StopTime = CalculateStopTime(originalRailway.ArrivalTime, originalRailway.DepartureTime)
+			sum = sum + 1
+			railWays = make([]dao.RailWay, 0)
+			if sum%200 == 0 {
+				fmt.Println(sum)
 			}
-			for _, frontOriginalRailway := range original {
-				tFrontOriginalRailway := frontOriginalRailway
-				tOriginalRailway := originalRailway
-				if tFrontOriginalRailway.StationSequence > tOriginalRailway.StationSequence {
-					tFrontOriginalRailway, tOriginalRailway = tOriginalRailway, tFrontOriginalRailway
-				}
-				railWay := dao.RailWay{
-					TrainNumber:      tFrontOriginalRailway.TrainNumber,
-					TrainNo:          tFrontOriginalRailway.TrainNo,
-					DepartureStation: tFrontOriginalRailway.ArrivalStation,
-					DepartureTime:    tFrontOriginalRailway.DepartureTime,
-					ArrivalStation:   tOriginalRailway.ArrivalStation,
-					ArrivalTime:      tOriginalRailway.ArrivalTime,
-				}
-				if railWay.TrainNumber[0] == 'G' || railWay.TrainNumber[0] == 'D' || railWay.TrainNumber[0] == 'C' {
-					railWay.IsHighSpeed = 1
-				} else {
-					railWay.IsHighSpeed = 0
-				}
-				startTime, err := GetTime(tFrontOriginalRailway.RunningTime)
-				if err != nil {
-					return err
-				}
-				arriveTime, err := GetTime(tOriginalRailway.RunningTime)
-				if err != nil {
-					return err
-				}
-				runningTime := arriveTime - startTime - tFrontOriginalRailway.StopTime
-				if runningTime < 0 {
-					fmt.Printf("runningTime<0 tFrontOriginalRailway:%v tOriginalRailway:%v\n", tFrontOriginalRailway, tOriginalRailway)
-					continue
-				}
-
-				railWay.RunningTime = TurnToTime(runningTime)
-				if runningTime+startTime < 1440 {
-					railWay.ArrivalDay = 0
-				} else if runningTime+startTime < 2880 {
-					railWay.ArrivalDay = 1
-				} else {
-					railWay.ArrivalDay = 2
-				}
-				railWays = append(railWays, railWay)
-				sum = sum + 1
-				if sum%100 == 0 {
-					if sum%10000 == 0 {
-						fmt.Println(sum)
-					}
-					err = RailWayDAO.BatchCreateRailWays(railWays)
-					if err != nil {
-						return err
-					}
-					railWays = make([]dao.RailWay, 0)
-				}
-			}
-			original = append(original, originalRailway)
-			mapOriginal[originalRailway.ArrivalStation] = originalRailway
 		}
 	}
 	err = RailWayDAO.BatchCreateRailWays(railWays)
@@ -685,6 +642,36 @@ func DownLoadRailWay() error {
 	}
 	fmt.Println("railway create success")
 	return nil
+}
+func GetPrice(price string) float64 {
+	fPrice, err := strconv.ParseFloat(price, 64)
+	if err != nil {
+		return 0
+	}
+	return fPrice / 10
+}
+
+func GetLowPrice(railway dao.RailWay) float64 {
+	price := float64(10000)
+	price = comparePrice(railway.YWPrice, price)
+	price = comparePrice(railway.YZPrice, price)
+	price = comparePrice(railway.RWPrice, price)
+	price = comparePrice(railway.ZEPrice, price)
+	price = comparePrice(railway.ZYPrice, price)
+	price = comparePrice(railway.SWZPrice, price)
+	price = comparePrice(railway.TZPrice, price)
+	price = comparePrice(railway.GRPrice, price)
+	return price
+}
+
+func comparePrice(priceA, priceB float64) float64 {
+	if priceA < 0.5 {
+		return priceB
+	}
+	if priceA < priceB {
+		return priceA
+	}
+	return priceB
 }
 
 func GetTime(inputTime string) (int64, error) {

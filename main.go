@@ -51,7 +51,7 @@ func main() {
 		fmt.Println(sum)
 		fmt.Println(st)
 	}
-	result, err := service.R.SearchDirectly("杭州南", "上海松江", "all", 0)
+	result, err := service.R.SearchDirectly("杭州南", "上海松江", "all", service.LowPriceFirst)
 	if err != nil {
 		fmt.Println(err)
 	}
