@@ -80,7 +80,7 @@ func main() {
 	//for key, value := range resultMap {
 	//	fmt.Println(key, value)
 	//}
-	resultMap, err = service.R.SearchWithTwoTrans("杭州东", "长白山", service.Default, 3, 5)
+	resultMap, err = service.R.SearchWithTwoTrans("杭州东", "长白山", service.Default, 3, 5, service.LowPriceFirst)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -88,7 +88,7 @@ func main() {
 		fmt.Println(key, value)
 
 	}
-	resultMap, err = service.R.SearchWithTwoTrans("乌鲁木齐", "海口", service.Default, 3, service.DefaultResultNumber)
+	resultMap, err = service.R.SearchWithTwoTrans("乌鲁木齐", "海口", service.Default, 3, service.DefaultResultNumber, service.LowRunningTimeFirst)
 	if err != nil {
 		fmt.Println(err)
 	}

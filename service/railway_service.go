@@ -81,7 +81,7 @@ type RailwayService interface {
 	SearchDirectlyOnline(departureStation, arrivalStation string) (map[string][]dao.RailWay, error)
 	SearchWithOneTrans(departureStation, arrivalStation, speedOption string, sortOption int, limitStopTime, getAllResult int64) (map[string][]dao.RailWay, error)
 	SearchWithOneSpecificTrans(departureStation, midStation, arrivalStation, speedOption string, sortOption int, limitStopTime int64) (map[string][]dao.RailWay, error)
-	SearchWithTwoTrans(departureStation, arrivalStation, speedOption string, maxTrans, recordNumber int64) (map[string][]dao.RailWay, error)
+	SearchWithTwoTrans(departureStation, arrivalStation, speedOption string, maxTrans, recordNumber int64, sortOption int) (map[string][]dao.RailWay, error)
 }
 
 type RailWayServiceImpl struct {
@@ -186,7 +186,7 @@ func (r *RailWayServiceImpl) SearchWithOneTrans(departureStation, arrivalStation
 	return SortTransResult(result, sortOption, limitStopTime, getAllResult), nil
 }
 
-func (r *RailWayServiceImpl) SearchWithTwoTrans(departureStation, arrivalStation, speedOption string, maxTrans, recordNumber int64) (map[string][]dao.RailWay, error) {
+func (r *RailWayServiceImpl) SearchWithTwoTrans(departureStation, arrivalStation, speedOption string, maxTrans, recordNumber int64, sortOption int) (map[string][]dao.RailWay, error) {
 	if !r.checkStation(departureStation) || !r.checkStation(arrivalStation) {
 		log.Printf("[SearchWithTwoTrans] stationNotFind")
 		return nil, errors.New("stationNotFind")
@@ -205,7 +205,7 @@ func (r *RailWayServiceImpl) SearchWithTwoTrans(departureStation, arrivalStation
 		return nil, err
 	}
 	for i := int64(0); i < recordNumber; i++ {
-		result := Dijkstra(departureStation, arrivalStation, speedOption, forbidTrain, maxTrans)
+		result := Dijkstra(departureStation, arrivalStation, speedOption, forbidTrain, maxTrans, sortOption)
 		if result.AllRunningTime > 1440*30 {
 			break
 		}

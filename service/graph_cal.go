@@ -350,7 +350,7 @@ func turnADToEdges(arrival, departure dao.RailWay, maxArrivalDay, limitStopTime 
 	}
 }
 
-func Dijkstra(startStation, endStation, speedOption string, forbidTrain []string, sortOptions, maxTrans int64) AnalyseTrans {
+func Dijkstra(startStation, endStation, speedOption string, forbidTrain []string, maxTrans int64, sortOptions int) AnalyseTrans {
 	//for key, value := range Graph {
 	//	stringIndex := strings.Split(key, "/")
 	//	if len(stringIndex) > 2 && stringIndex[1] == "乌鲁木齐" {
