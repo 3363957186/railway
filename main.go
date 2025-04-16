@@ -8,21 +8,21 @@ import (
 )
 
 func init() {
-	//mssql.DropDB()
+	mssql.DropDB()
 	mssql.InitStation()
 	mssql.InitRailWay()
 	err := service.DownLoadKeyStation()
 	if err != nil {
 		fmt.Println(err)
 	}
-	//err = service.DownLoadStation()
-	//if err != nil {
-	//	fmt.Println(err)
-	//}
-	//err = service.DownLoadRailWay()
-	//if err != nil {
-	//	fmt.Println(err)
-	//}
+	err = service.DownLoadStation()
+	if err != nil {
+		fmt.Println(err)
+	}
+	err = service.DownLoadRailWay()
+	if err != nil {
+		fmt.Println(err)
+	}
 	service.R = service.NewRailwayService(service.RailWayDAO, service.StationService)
 	web.H = web.NewHandler(service.R)
 }

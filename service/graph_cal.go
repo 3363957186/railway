@@ -118,13 +118,13 @@ func (r *RailWayServiceImpl) InitBuildGraph() error {
 		departureTrains = sortByEarlyArriveFirst(departureTrains)
 		arrivalTrains = sortByEarlyArriveFirst(arrivalTrains)
 
-		arrivalTrains = getKeyTrains(arrivalTrains, true, 0)
+		//arrivalTrains = getKeyTrains(arrivalTrains, true, 0)
 		departureTrains = getKeyTrains(departureTrains, true, 0)
-		getKeyTrains(arrivalTrains, true, 1)
-		getKeyTrains(arrivalTrains, true, 2)
+		//getKeyTrains(arrivalTrains, true, 1)
+		//getKeyTrains(arrivalTrains, true, 2)
 		getKeyTrains(departureTrains, true, 1)
 		getKeyTrains(departureTrains, true, 2)
-
+		CalGraphSize()
 		departureTrains = sortByEarlyFirst(departureTrains)
 		KeyStationDeparture[key] = departureTrains
 		KeyStationArrival[key] = arrivalTrains
@@ -143,25 +143,26 @@ func getKeyTrains(input []dao.RailWay, isAddGraph bool, dayTime int) []dao.RailW
 	result := make([]dao.RailWay, 0)
 	rememberTrainNo := make(map[string]string)
 	for _, v := range input {
+		if !checkKeyStation(v.DepartureStation) || !checkKeyStation(v.ArrivalStation) {
+			continue
+		}
 		_, ok := rememberTrainNo[v.TrainNo]
 		if ok {
 			continue
 		}
-		if checkKeyStation(v.DepartureStation) && checkKeyStation(v.ArrivalStation) {
-			rememberTrainNo[v.TrainNo] = v.TrainNo
-			result = append(result, v)
-			if isAddGraph {
-				//加边
-				vv := v
-				vv.ArrivalDay = vv.ArrivalDay + uint(dayTime)
-				departIndex := "D/" + v.DepartureStation + "/" + v.TrainNo + "/" + strconv.Itoa(dayTime)
-				value, ok := Graph[departIndex]
-				if ok {
-					value = append(value, vv)
-					Graph[departIndex] = value
-				} else {
-					Graph[departIndex] = []dao.RailWay{vv}
-				}
+		rememberTrainNo[v.TrainNo] = v.TrainNo
+		result = append(result, v)
+		if isAddGraph {
+			//加边
+			vv := v
+			vv.ArrivalDay = vv.ArrivalDay + uint(dayTime)
+			departIndex := "D/" + v.DepartureStation + "/" + v.TrainNo + "/" + strconv.Itoa(dayTime)
+			value, ok2 := Graph[departIndex]
+			if ok2 {
+				value = append(value, vv)
+				Graph[departIndex] = value
+			} else {
+				Graph[departIndex] = []dao.RailWay{vv}
 			}
 		}
 	}
@@ -225,7 +226,13 @@ func getOneKeyTrains(input []dao.RailWay, isAddGraph bool, dayTime int, IsTempla
 }
 
 func buildDepartureWaitingEdges(arrival, departure dao.RailWay, maxArrivalDay int64) {
+	rememberTrainNo := make(map[string]string)
 	for arrivalDay := int64(0); arrivalDay <= maxArrivalDay; arrivalDay++ {
+		_, ok := rememberTrainNo[arrival.TrainNo+strconv.FormatInt(arrivalDay, 10)]
+		if ok {
+			continue
+		}
+		rememberTrainNo[arrival.TrainNo+strconv.FormatInt(arrivalDay, 10)] = arrival.TrainNo
 		newEdge := dao.RailWay{
 			TrainNumber:      Waiting,
 			TrainNo:          arrival.TrainNo,
@@ -270,14 +277,27 @@ func buildArrivalToDepartureWaitingEdges(arrivalTrains, departureTrains []dao.Ra
 	if dLength == 0 {
 		return
 	}
+	rememberTrainNo := make(map[string]string)
 	for _, arrival := range arrivalTrains {
+		_, ok := rememberTrainNo[arrival.TrainNo]
+		if ok {
+			continue
+		}
+		rememberTrainNo[arrival.TrainNo] = arrival.TrainNo
 		for _, departure := range departureTrains {
 			if arrival.TrainNo == departure.TrainNo {
 				turnADToEdges(arrival, departure, 2, 0, false)
+				break
 			}
 		}
 	}
+	rememberTrainNo = make(map[string]string)
 	for _, arrival := range arrivalTrains {
+		_, ok := rememberTrainNo[arrival.TrainNo]
+		if ok {
+			continue
+		}
+		rememberTrainNo[arrival.TrainNo] = arrival.TrainNo
 		isSuccess := false
 		for i := dIndex; i < dLength; i++ {
 			aTime, _ := GetTime(arrival.ArrivalTime)
@@ -296,7 +316,7 @@ func buildArrivalToDepartureWaitingEdges(arrivalTrains, departureTrains []dao.Ra
 				dTime, _ := GetTime(train.DepartureTime)
 				if aTime+limitStopTime <= dTime+1440 && arrival.TrainNo != train.TrainNo {
 					turnADToEdges(arrival, train, 2, limitStopTime, false)
-					isSuccess = true
+					break
 				}
 			}
 		}
@@ -304,8 +324,14 @@ func buildArrivalToDepartureWaitingEdges(arrivalTrains, departureTrains []dao.Ra
 }
 
 func turnADToEdges(arrival, departure dao.RailWay, maxArrivalDay, limitStopTime int64, isTemplate bool) {
+	rememberTrainNo := make(map[string]string)
 	for arrivalDay := int64(0); arrivalDay <= maxArrivalDay; arrivalDay++ {
-		templatearrivalDay := arrivalDay
+		_, ok := rememberTrainNo[arrival.TrainNo+strconv.FormatInt(arrivalDay, 10)]
+		if ok {
+			continue
+		}
+		rememberTrainNo[arrival.TrainNo+strconv.FormatInt(arrivalDay, 10)] = arrival.TrainNo
+		templateArrivalDay := arrivalDay
 		newEdge := dao.RailWay{
 			TrainNumber:      Waiting,
 			TrainNo:          departure.TrainNo,
@@ -327,9 +353,9 @@ func turnADToEdges(arrival, departure dao.RailWay, maxArrivalDay, limitStopTime 
 		//同一班列车的limitStopTime要为0
 		if dTime+limitStopTime > aTime {
 			newEdge.ArrivalDay = newEdge.ArrivalDay + 1
-			templatearrivalDay = arrivalDay + 1
+			templateArrivalDay = arrivalDay + 1
 		}
-		arrivalIndex := "A/" + newEdge.DepartureStation + "/" + arrival.TrainNo + "/" + strconv.FormatInt(templatearrivalDay, 10)
+		arrivalIndex := "A/" + newEdge.DepartureStation + "/" + arrival.TrainNo + "/" + strconv.FormatInt(templateArrivalDay, 10)
 		if isTemplate {
 			value, ok := TemplateGraph[arrivalIndex]
 			if ok {
@@ -626,4 +652,24 @@ func getAnalyseTransByPrice(edge dao.RailWay, forbidTrain []string, currNode, sp
 		return &Item{node: nextNode, allTime: newTime, transferTimes: newTransfers}
 	}
 	return nil
+}
+
+func CalGraphSize() {
+	sum := 0
+	st := 0
+	for _, value := range Graph {
+		sum = sum + len(value)
+		st = st + 1
+	}
+	fmt.Println(sum)
+	fmt.Println(st)
+	if sum > st*4 {
+		for key, value := range Graph {
+			if len(value) > 4 {
+				fmt.Println(key, value)
+				break
+			}
+		}
+
+	}
 }

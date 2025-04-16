@@ -590,7 +590,7 @@ func DownLoadRailWay() error {
 		log.Fatalf("无法读取工作表数据: %v", err)
 		return err
 	}
-
+	rememberTrainNo := make(map[string]string)
 	railWays := make([]dao.RailWay, 0)
 	sum := 0
 	for i, row := range rows {
@@ -622,6 +622,11 @@ func DownLoadRailWay() error {
 			TZPrice:          GetPrice(row[13]),
 			GRPrice:          GetPrice(row[14]),
 		}
+		_, ok := rememberTrainNo[originalRailway.TrainNo+originalRailway.DepartureStation+originalRailway.ArrivalStation]
+		if ok {
+			continue
+		}
+		rememberTrainNo[originalRailway.TrainNo+originalRailway.DepartureStation+originalRailway.ArrivalStation] = originalRailway.TrainNo
 		originalRailway.Price = GetLowPrice(originalRailway)
 		railWays = append(railWays, originalRailway)
 		if len(railWays) > 50 {
