@@ -59,6 +59,15 @@ type TemplateTrainSchedule struct {
 	RunningTime      []string
 	ArrivalDay       []uint
 	IsHighSpeed      []uint
+	Price            []float64
+	YWPrice          []float64
+	YZPrice          []float64
+	RWPrice          []float64
+	ZEPrice          []float64
+	ZYPrice          []float64
+	SWZPrice         []float64
+	TZPrice          []float64
+	GRPrice          []float64
 	AllRunningTime   uint
 }
 
@@ -311,6 +320,15 @@ func ChangeToRailWays(tt TemplateTrainSchedule) ([]dao.RailWay, string) {
 			DepartureTime:    tt.DepartureTime[index],
 			RunningTime:      tt.RunningTime[index],
 			ArrivalDay:       tt.ArrivalDay[index],
+			Price:            tt.Price[index],
+			YWPrice:          tt.YWPrice[index],
+			YZPrice:          tt.YZPrice[index],
+			TZPrice:          tt.TZPrice[index],
+			ZYPrice:          tt.ZYPrice[index],
+			GRPrice:          tt.GRPrice[index],
+			RWPrice:          tt.RWPrice[index],
+			ZEPrice:          tt.ZEPrice[index],
+			SWZPrice:         tt.SWZPrice[index],
 			IsHighSpeed:      tt.IsHighSpeed[index],
 		})
 	}
@@ -330,6 +348,15 @@ func ChangeToTemplate(railWays []dao.RailWay, limitStopTime int64) TemplateTrain
 		RunningTime:      make([]string, 0),
 		ArrivalDay:       make([]uint, 0),
 		IsHighSpeed:      make([]uint, 0),
+		Price:            make([]float64, 0),
+		YWPrice:          make([]float64, 0),
+		YZPrice:          make([]float64, 0),
+		RWPrice:          make([]float64, 0),
+		ZEPrice:          make([]float64, 0),
+		ZYPrice:          make([]float64, 0),
+		SWZPrice:         make([]float64, 0),
+		TZPrice:          make([]float64, 0),
+		GRPrice:          make([]float64, 0),
 		AllRunningTime:   0,
 	}
 	for _, train := range railWays {
@@ -342,6 +369,15 @@ func ChangeToTemplate(railWays []dao.RailWay, limitStopTime int64) TemplateTrain
 		schedule.ArrivalTime = append(schedule.ArrivalTime, train.ArrivalTime)
 		schedule.RunningTime = append(schedule.RunningTime, train.RunningTime)
 		schedule.ArrivalDay = append(schedule.ArrivalDay, train.ArrivalDay)
+		schedule.Price = append(schedule.Price, train.Price)
+		schedule.YWPrice = append(schedule.YWPrice, train.YWPrice)
+		schedule.YZPrice = append(schedule.YZPrice, train.YZPrice)
+		schedule.RWPrice = append(schedule.RWPrice, train.RWPrice)
+		schedule.ZEPrice = append(schedule.ZEPrice, train.ZEPrice)
+		schedule.ZYPrice = append(schedule.ZYPrice, train.ZYPrice)
+		schedule.SWZPrice = append(schedule.ZYPrice, train.SWZPrice)
+		schedule.TZPrice = append(schedule.TZPrice, train.TZPrice)
+		schedule.GRPrice = append(schedule.GRPrice, train.GRPrice)
 		schedule.IsHighSpeed = append(schedule.IsHighSpeed, train.IsHighSpeed)
 	}
 	schedule.AllRunningTime = uint(GetAllRunningTime(schedule, limitStopTime))

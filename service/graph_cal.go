@@ -124,7 +124,7 @@ func (r *RailWayServiceImpl) InitBuildGraph() error {
 		//getKeyTrains(arrivalTrains, true, 2)
 		getKeyTrains(departureTrains, true, 1)
 		getKeyTrains(departureTrains, true, 2)
-		CalGraphSize()
+		//CalGraphSize()
 		departureTrains = sortByEarlyFirst(departureTrains)
 		KeyStationDeparture[key] = departureTrains
 		KeyStationArrival[key] = arrivalTrains
