@@ -10,6 +10,8 @@ import (
 	"strings"
 )
 
+var findbugs AnalyseTrans
+
 func (r *RailWayServiceImpl) AddNewStation(stationName string, isDeparture bool, startTime int64) error {
 	if isDeparture {
 		departureTrains, err := r.RailWayDAO.GetRailWayByDepartureStation(stationName)
@@ -411,6 +413,7 @@ func Dijkstra(startStation, endStation, speedOption string, forbidTrain []string
 
 	// 初始化最小堆
 	pq := &PriorityQueue{}
+	findbugs = dist[4]["A/海口/65000Z80060S/0"]
 	heap.Init(pq)
 	heap.Push(pq, &Item{node: StartIndex, allTime: 0, transferTimes: 0})
 	//fmt.Println(Graph[StartIndex])
@@ -436,18 +439,10 @@ func Dijkstra(startStation, endStation, speedOption string, forbidTrain []string
 				if curr.specialTag == true && edge.DepartureStation == edge.ArrivalStation {
 					continue
 				}
-				if sortOptions == LowPriceFirst {
-					item := getAnalyseTransByPrice(edge, forbidTrain, currNode, speedOption, currTransfers, currTime, maxTrans, currPrice)
-					if item != nil {
-						heap.Push(pq, item)
-					}
-				} else {
-					item := getAnalyseTransByTime(edge, forbidTrain, currNode, speedOption, currTransfers, currTime, maxTrans, currPrice)
-					if item != nil {
-						heap.Push(pq, item)
-					}
+				item := getAnalyseTransByTime(edge, forbidTrain, currNode, speedOption, currTransfers, currTime, maxTrans, currPrice)
+				if item != nil {
+					heap.Push(pq, item)
 				}
-
 			}
 		}
 		edges, ok = Graph[currNode]
@@ -456,16 +451,9 @@ func Dijkstra(startStation, endStation, speedOption string, forbidTrain []string
 				if curr.specialTag == true && edge.DepartureStation == edge.ArrivalStation {
 					continue
 				}
-				if sortOptions == LowPriceFirst {
-					item := getAnalyseTransByPrice(edge, forbidTrain, currNode, speedOption, currTransfers, currTime, maxTrans, currPrice)
-					if item != nil {
-						heap.Push(pq, item)
-					}
-				} else {
-					item := getAnalyseTransByTime(edge, forbidTrain, currNode, speedOption, currTransfers, currTime, maxTrans, currPrice)
-					if item != nil {
-						heap.Push(pq, item)
-					}
+				item := getAnalyseTransByTime(edge, forbidTrain, currNode, speedOption, currTransfers, currTime, maxTrans, currPrice)
+				if item != nil {
+					heap.Push(pq, item)
 				}
 			}
 		}
@@ -533,7 +521,6 @@ func getAnalyseTransByTime(edge dao.RailWay, forbidTrain []string, currNode, spe
 	} else {
 		specialTag = false
 	}
-
 	newTime := currTime + travelTime
 	newTransfers := currTransfers + transfers
 	if newTransfers > maxTrans {
@@ -555,9 +542,9 @@ func getAnalyseTransByTime(edge dao.RailWay, forbidTrain []string, currNode, spe
 			NowTrainNo:      edge.TrainNo,
 			NowStation:      edge.ArrivalStation,
 			NowStatus:       status,
-			TrainNumber:     dist[currTransfers][currNode].TrainNumber,
-			TrainNo:         dist[currTransfers][currNode].TrainNo,
-			StationSequence: dist[currTransfers][currNode].StationSequence,
+			TrainNumber:     append([]string(nil), dist[currTransfers][currNode].TrainNumber...),
+			TrainNo:         append([]string(nil), dist[currTransfers][currNode].TrainNo...),
+			StationSequence: append([]string(nil), dist[currTransfers][currNode].StationSequence...),
 			AllRunningTime:  newTime,
 			TransFerTimes:   newTransfers,
 			ToTalPrice:      currPrice + edge.Price,
@@ -569,13 +556,12 @@ func getAnalyseTransByTime(edge dao.RailWay, forbidTrain []string, currNode, spe
 			newAnalyseTrans.StationSequence = append(newAnalyseTrans.StationSequence, edge.DepartureStation)
 		}
 		dist[newTransfers][nextNode] = newAnalyseTrans
-
 		return &Item{node: nextNode, allTime: newTime, transferTimes: newTransfers, specialTag: specialTag}
 	}
 	return nil
 }
 
-func getAnalyseTransByPrice(edge dao.RailWay, forbidTrain []string, currNode, speedOption string, currTransfers, currTime, maxTrans int64, currPrice float64) *Item {
+func getAnalyseTransByPrice(edge dao.RailWay, forbidTrain []string, currNode, speedOption string, currTransfers, currTime, maxTrans int64, currPrice float64) *Item2 {
 	if isInForbid(edge.TrainNo, forbidTrain) {
 		return nil
 	}
@@ -634,9 +620,9 @@ func getAnalyseTransByPrice(edge dao.RailWay, forbidTrain []string, currNode, sp
 			NowTrainNo:      edge.TrainNo,
 			NowStation:      edge.ArrivalStation,
 			NowStatus:       status,
-			TrainNumber:     dist[currTransfers][currNode].TrainNumber,
-			TrainNo:         dist[currTransfers][currNode].TrainNo,
-			StationSequence: dist[currTransfers][currNode].StationSequence,
+			TrainNumber:     append([]string(nil), dist[currTransfers][currNode].TrainNumber...),
+			TrainNo:         append([]string(nil), dist[currTransfers][currNode].TrainNo...),
+			StationSequence: append([]string(nil), dist[currTransfers][currNode].StationSequence...),
 			AllRunningTime:  newTime,
 			TransFerTimes:   newTransfers,
 			ToTalPrice:      newPrice,
@@ -648,8 +634,7 @@ func getAnalyseTransByPrice(edge dao.RailWay, forbidTrain []string, currNode, sp
 			newAnalyseTrans.StationSequence = append(newAnalyseTrans.StationSequence, edge.DepartureStation)
 		}
 		dist[newTransfers][nextNode] = newAnalyseTrans
-
-		return &Item{node: nextNode, allTime: newTime, transferTimes: newTransfers}
+		return &Item2{node: nextNode, allTime: newTime, transferTimes: newTransfers}
 	}
 	return nil
 }
@@ -671,5 +656,92 @@ func CalGraphSize() {
 			}
 		}
 
+	}
+}
+func DijkstraByPrice(startStation, endStation, speedOption string, forbidTrain []string, maxTrans int64, sortOptions int) AnalyseTrans {
+	//for key, value := range Graph {
+	//	stringIndex := strings.Split(key, "/")
+	//	if len(stringIndex) > 2 && stringIndex[1] == "乌鲁木齐" {
+	//		fmt.Println(value)
+	//	}
+	//}
+
+	// 初始化最短路径映射
+	dist = make([]map[string]AnalyseTrans, 0)
+	for i := int64(0); i <= maxTrans; i++ {
+		dist = append(dist, make(map[string]AnalyseTrans))
+	}
+	// 初始化所有点的路径值为最大
+	for node := range Graph {
+		for i := int64(0); i <= maxTrans; i++ {
+			dist[i][node] = AnalyseTrans{
+				AllRunningTime: math.MaxInt64,
+				ToTalPrice:     math.MaxInt64,
+				TransFerTimes:  math.MaxInt64,
+			}
+		}
+	}
+	dist[0][StartIndex] = AnalyseTrans{
+		AllRunningTime:  0,
+		TransFerTimes:   0,
+		ToTalPrice:      0,
+		NowStatus:       "D",
+		TrainNumber:     []string{},
+		TrainNo:         []string{},
+		StationSequence: []string{},
+	}
+
+	// 初始化最小堆
+	pq := &PriorityQueue2{}
+	findbugs = dist[4]["A/海口/65000Z80060S/0"]
+	heap.Init(pq)
+	heap.Push(pq, &Item2{node: StartIndex, allTime: 0, transferTimes: 0})
+	//fmt.Println(Graph[StartIndex])
+	// 运行 Dijkstra
+	for pq.Len() > 0 {
+		curr := heap.Pop(pq).(*Item2)
+		currNode, currTime, currTransfers, currPrice := curr.node, curr.allTime, curr.transferTimes, curr.price
+		// 如果当前路径已经不是最短路径，则跳过
+		if currTime > dist[currTransfers][currNode].AllRunningTime ||
+			(currTime == dist[currTransfers][currNode].AllRunningTime && currTransfers > dist[currTransfers][currNode].TransFerTimes) {
+			continue
+		}
+		indexString := strings.Split(currNode, "/")
+		if len(indexString) > 1 && indexString[1] == endStation {
+			return dist[currTransfers][currNode]
+		}
+		//fmt.Println(dist[currTransfers][currNode])
+		// 遍历邻接点
+		edges, ok := TemplateGraph[currNode]
+		if ok {
+			for _, edge := range edges {
+				//判断specialTag
+				if curr.specialTag == true && edge.DepartureStation == edge.ArrivalStation {
+					continue
+				}
+				if sortOptions == LowPriceFirst {
+					item := getAnalyseTransByPrice(edge, forbidTrain, currNode, speedOption, currTransfers, currTime, maxTrans, currPrice)
+					if item != nil {
+						heap.Push(pq, item)
+					}
+				}
+			}
+		}
+		edges, ok = Graph[currNode]
+		if ok {
+			for _, edge := range edges {
+				if curr.specialTag == true && edge.DepartureStation == edge.ArrivalStation {
+					continue
+				}
+				item := getAnalyseTransByPrice(edge, forbidTrain, currNode, speedOption, currTransfers, currTime, maxTrans, currPrice)
+				if item != nil {
+					heap.Push(pq, item)
+				}
+			}
+		}
+	}
+	return AnalyseTrans{
+		AllRunningTime: math.MaxInt64,
+		TransFerTimes:  math.MaxInt64,
 	}
 }

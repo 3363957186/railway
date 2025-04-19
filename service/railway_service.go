@@ -214,7 +214,13 @@ func (r *RailWayServiceImpl) SearchWithTwoTrans(departureStation, arrivalStation
 		return nil, err
 	}
 	for i := int64(0); i < recordNumber; i++ {
-		result := Dijkstra(departureStation, arrivalStation, speedOption, forbidTrain, maxTrans, sortOption)
+		result := AnalyseTrans{}
+		if sortOption == LowPriceFirst {
+			result = DijkstraByPrice(departureStation, arrivalStation, speedOption, forbidTrain, maxTrans, sortOption)
+		} else {
+			result = Dijkstra(departureStation, arrivalStation, speedOption, forbidTrain, maxTrans, sortOption)
+		}
+
 		if result.AllRunningTime > 1440*30 {
 			break
 		}
